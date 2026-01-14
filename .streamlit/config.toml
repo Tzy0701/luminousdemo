@@ -1,0 +1,19 @@
+# Streamlit Configuration
+# This file configures Streamlit app behavior
+
+[server]
+# Allow CORS for API communication
+enableCORS = true
+enableXsrfProtection = true
+
+[browser]
+# Automatically open browser (for local dev)
+gatherUsageStats = false
+
+[theme]
+# Optional: Define custom theme colors
+primaryColor = "#10B981"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F4F6"
+textColor = "#1A202C"
+font = "sans serif"

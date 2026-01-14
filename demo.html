@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fingerprint Detector Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 1040px; margin: 20px auto; padding: 0 12px; background:#fafafa; }
+    h1 { font-size: 1.4rem; margin-bottom: 10px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 980px) { .grid { grid-template-columns: 1.1fr 0.9fr; } }
+
+    .card { background: #fff; border: 1px solid #e6e6e6; padding: 14px 16px; border-radius: 10px; }
+    .card h3 { margin: 0 0 10px; font-size: 1.05rem; }
+    .muted { color: #666; font-size: 0.92rem; }
+
+    label { display: block; margin-top: 8px; }
+    input[type="file"] { margin-top: 4px; }
+    button { margin-top: 12px; padding: 9px 14px; border: 0; background:#111; color:#fff; border-radius: 8px; cursor:pointer; }
+    button:disabled { opacity: 0.6; cursor:not-allowed; }
+
+    .badges { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .badge { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; border:1px solid #e6e6e6; background:#f7f7f7; font-size:0.9rem; }
+    .ok { background:#ecfdf3; border-color:#b7f7cc; }
+    .warn { background:#fff8e6; border-color:#ffe1a6; }
+    .fail { background:#feecec; border-color:#ffb9b9; }
+
+    .big { font-size: 1.6rem; font-weight: 700; display:flex; gap:10px; align-items:baseline; }
+    .big span { font-size: 1rem; font-weight: 500; color:#444; }
+
+    pre { background: #f7f7f7; padding: 12px; border-radius: 8px; overflow: auto; margin:0; }
+    img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; background:#fff; }
+    #preview, #overlayImg, #overlayImg2 { width: 100%; max-width: 100%; display: block; object-fit: contain; max-height: 520px; }
+    #overlayCard { grid-column: 1 / -1; } /* let overlay span full width for larger view */
+
+    .rows { display:flex; flex-direction:column; gap:8px; }
+    .row { display:flex; justify-content:space-between; padding:8px 10px; border:1px solid #eee; border-radius:8px; }
+    .row.highlight { border-color:#111; background:#f3f3f3; font-weight:700; }
+
+    table { width:100%; border-collapse: collapse; }
+    td { padding:6px 4px; border-bottom:1px solid #f1f1f1; vertical-align:top; }
+    td.k { width: 42%; color:#555; }
+    td.v { font-weight:600; }
+
+    .actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+    a.btn { display:inline-flex; padding:8px 12px; border:1px solid #ddd; border-radius:8px; color:#111; text-decoration:none; background:#fff; }
+    a.btn:hover { background:#f6f6f6; }
+  </style>
+</head>
+<body>
+  <h1>Fingerprint Core/Delta Detector Demo</h1>
+  
+  <!-- Live Scanner Section -->
+  <div class="card" style="border: 2px solid #4CAF50;">
+    <h3>🔴 Live Scanner</h3>
+    <p class="muted">Connect your fingerprint scanner and capture in real-time</p>
+    
+    <div class="actions">
+      <button id="startScanBtn" style="background:#4CAF50;">Start Live Scan</button>
+      <button id="stopScanBtn" style="background:#f44336; display:none;">Stop Scanning</button>
+      <button id="captureBtn" style="background:#2196F3; display:none;" disabled>Capture & Analyze</button>
+    </div>
+    
+    <div id="livePreviewCard" style="display:none; margin-top:16px; padding:12px; border:1px solid #ddd; border-radius:8px; background:#f9f9f9;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span id="liveStatus" class="muted">Initializing...</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="muted" style="font-size:0.85rem;">Quality:</span>
+          <div id="qualityBar" style="width:100px; height:8px; background:#eee; border-radius:4px; overflow:hidden;">
+            <div id="qualityFill" style="width:0%; height:100%; background:#4CAF50; transition:all 0.3s;"></div>
+          </div>
+          <span id="qualityText" style="font-weight:600; min-width:40px;">0%</span>
+        </div>
+      </div>
+      <img id="livePreview" style="width:100%; max-width:400px; border:2px solid #ddd; border-radius:8px; background:#000; display:block; margin:0 auto;" />
+    </div>
+    
+    <div id="scanStatusText" class="muted" style="margin-top:10px;"></div>
+  </div>
+  
+  <!-- OR Divider -->
+  <div style="text-align:center; margin:20px 0; color:#999; font-size:0.9rem;">
+    <span style="background:#fafafa; padding:0 10px;">OR</span>
+  </div>
+  
+  <!-- File Upload Section -->
+  <div class="card">
+    <h3>📁 Upload Image</h3>
+    <label>Fingerprint image (bmp/png/jpg/jpeg)
+      <input id="fileInput" type="file" accept=".bmp,.png,.jpg,.jpeg,image/bmp,image/png,image/jpeg" />
+    </label>
+
+    <div class="actions">
+      <button id="submitBtn">Detect</button>
+      <span id="statusText" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT COLUMN -->
+    <div class="card">
+      <h3>Uploaded Preview</h3>
+      <img id="preview" alt="Preview will appear here" />
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="card" id="finalCard" style="display:none;">
+      <h3>Final Result</h3>
+      <div class="big" id="finalTitle"></div>
+      <div class="badges" id="finalBadges"></div>
+
+      <div class="muted" style="margin-top:10px;">
+        <span id="finalNote"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card" id="evidenceCard" style="display:none;">
+      <h3>Evidence (Core / Delta / Ridge Count)</h3>
+      <table>
+        <tr><td class="k">Detected cores</td><td class="v" id="evCores"></td></tr>
+        <tr><td class="k">Detected deltas</td><td class="v" id="evDeltas"></td></tr>
+        <tr><td class="k">Ridge count (min)</td><td class="v" id="evRidge"></td></tr>
+        <tr><td class="k">Quality</td><td class="v" id="evQuality"></td></tr>
+      </table>
+      <div class="muted" id="evPoints" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card" id="modelCard" style="display:none;">
+      <h3>CNN Probabilities (Top 5)</h3>
+      <div class="rows" id="probRows"></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card" id="rulesCard" style="display:none;">
+      <h3>Rules & Consistency</h3>
+      <div id="rulesSummary" class="muted"></div>
+      <pre id="rulesText" style="margin-top:10px;"></pre>
+    </div>
+
+    <div class="card" id="overlayCard" style="display:none;">
+      <h3>Overlay</h3>
+      <img id="overlayImg" alt="Overlay will appear here" />
+      <img id="overlayImg2" alt="Overlay (lightweight)" style="display:none; margin-top:12px;" />
+    </div>
+  </div>
+
+  <div class="card" id="invalidCard" style="display:none; border-color:#c00;">
+    <h3 id="invalidTitle" style="color:#c00;">Invalid fingerprint – please recapture</h3>
+    <div id="invalidReasons"></div>
+    <pre id="invalidMetrics" style="margin-top:10px;"></pre>
+    <div id="actionHints" class="muted" style="margin-top:6px;"></div>
+    <div id="artifactLink" class="actions" style="margin-top:10px;"></div>
+    <img id="invalidImg" alt="Failure overlay" style="display:none; margin-top:10px; max-width:100%; border:1px solid #ddd; border-radius:8px;" />
+  </div>
+
+  <div class="card">
+    <h3>Raw Response</h3>
+    <details>
+      <summary class="muted">Show JSON</summary>
+      <pre id="response">No response yet.</pre>
+    </details>
+  </div>
+
+  <div class="card" id="warningCard" style="display:none;">
+    <h3>Warnings</h3>
+    <div id="warningsList" class="muted"></div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const statusText = document.getElementById('statusText');
+
+    const responseEl = document.getElementById('response');
+    const previewEl = document.getElementById('preview');
+
+    const finalCard = document.getElementById('finalCard');
+    const finalTitle = document.getElementById('finalTitle');
+    const finalBadges = document.getElementById('finalBadges');
+    const finalNote = document.getElementById('finalNote');
+
+    const evidenceCard = document.getElementById('evidenceCard');
+    const evCores = document.getElementById('evCores');
+    const evDeltas = document.getElementById('evDeltas');
+    const evRidge = document.getElementById('evRidge');
+    const evQuality = document.getElementById('evQuality');
+    const evPoints = document.getElementById('evPoints');
+
+    const modelCard = document.getElementById('modelCard');
+    const probRows = document.getElementById('probRows');
+
+    const rulesCard = document.getElementById('rulesCard');
+    const rulesText = document.getElementById('rulesText');
+    const rulesSummary = document.getElementById('rulesSummary');
+
+    const overlayCard = document.getElementById('overlayCard');
+    const overlayImg = document.getElementById('overlayImg');
+    const overlayImg2 = document.getElementById('overlayImg2');
+    const invalidCard = document.getElementById('invalidCard');
+    const invalidReasons = document.getElementById('invalidReasons');
+    const invalidMetrics = document.getElementById('invalidMetrics');
+    const actionHints = document.getElementById('actionHints');
+    const artifactLink = document.getElementById('artifactLink');
+    const invalidTitle = document.getElementById('invalidTitle');
+    const invalidImg = document.getElementById('invalidImg');
+    const warningCard = document.getElementById('warningCard');
+    const warningsList = document.getElementById('warningsList');
+
+    const PATTERN_RULES = {
+      wpe: "Whorl Peacock Eye: circular whorl with a central pocket/eye; two deltas.",
+      ws: "Whorl Spiral: ridges spiral around the center; two deltas.",
+      wd: "Whorl Double Loop: two interlaced loops forming an S-shape; two deltas.",
+      we: "Whorl Elongated: stretched/elliptical whorl ridges; two deltas.",
+      lu: "Loop Ulnar: loop opens toward the ulnar side (little finger); one delta.",
+      au: "Loop Arch-Loop / Radial: transitional loop; one delta, often smaller ridge count than LU.",
+      at: "Tented Arch: central up-thrust/angled ridges; may appear like a sharp spike.",
+      as: "Simple Arch: ridges flow from one side to the other with no delta."
+    };
+
+    function resetUI() {
+      finalCard.style.display = 'none';
+      evidenceCard.style.display = 'none';
+      modelCard.style.display = 'none';
+      rulesCard.style.display = 'none';
+      overlayCard.style.display = 'none';
+      invalidCard.style.display = 'none';
+      invalidImg.style.display = 'none';
+      warningCard.style.display = 'none';
+      overlayImg.src = '';
+      overlayImg2.style.display = 'none';
+      overlayImg2.src = '';
+      statusText.textContent = '';
+    }
+
+    function badge(text, kind="") {
+      const s = document.createElement('span');
+      s.className = `badge ${kind}`;
+      s.textContent = text;
+      return s;
+    }
+
+    function getMinRidgeCount(data) {
+      const details = data.ridge_count_details || [];
+      if (!details.length) return null;
+      return Math.min(...details.map(d => d.ridge_count ?? 999));
+    }
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (file) previewEl.src = URL.createObjectURL(file);
+    });
+
+    // Live Scanner Variables
+    const startScanBtn = document.getElementById('startScanBtn');
+    const stopScanBtn = document.getElementById('stopScanBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const livePreviewCard = document.getElementById('livePreviewCard');
+    const livePreview = document.getElementById('livePreview');
+    const liveStatus = document.getElementById('liveStatus');
+    const scanStatusText = document.getElementById('scanStatusText');
+    const qualityBar = document.getElementById('qualityFill');
+    const qualityText = document.getElementById('qualityText');
+    
+    let eventSource = null;
+    let isScanning = false;
+    let lastCapturedFrame = null;
+    
+    // Start live scanning with EventSource (SSE)
+    startScanBtn.addEventListener('click', async () => {
+      try {
+        startScanBtn.disabled = true;
+        scanStatusText.textContent = 'Starting scanner...';
+        
+        // Show live preview UI
+        startScanBtn.style.display = 'none';
+        stopScanBtn.style.display = 'inline-block';
+        livePreviewCard.style.display = 'block';
+        captureBtn.style.display = 'inline-block';
+        
+        isScanning = true;
+        
+        // Start SSE connection to live scanner
+        eventSource = new EventSource('/scanner/live');
+        
+        eventSource.onmessage = async (event) => {
+          const data = event.data;
+          
+          if (data === 'INIT') {
+            scanStatusText.textContent = 'Initializing scanner...';
+            liveStatus.textContent = '⏳ Initializing...';
+            liveStatus.style.color = '#666';
+          } else if (data === 'READY') {
+            scanStatusText.textContent = 'Scanner ready. Place finger on scanner...';
+            liveStatus.textContent = '⏳ Waiting for finger...';
+            liveStatus.style.color = '#666';
+            liveStatus.style.fontWeight = 'normal';
+            qualityBar.style.width = '0%';
+            qualityText.textContent = '0%';
+            captureBtn.disabled = true;
+          } else if (data.startsWith('CAPTURED:')) {
+            // Got a fingerprint capture notification - fetch the actual image
+            const timestamp = data.substring(9);
+            console.log('✓ Fingerprint captured at:', timestamp);
+            
+            try {
+              // Fetch the captured image from the server
+              const res = await fetch('/scanner/latest');
+              const captureData = await res.json();
+              
+              if (captureData.success && captureData.base64) {
+                lastCapturedFrame = captureData.base64;
+                
+                // Display the captured fingerprint
+                livePreview.src = 'data:image/bmp;base64,' + captureData.base64;
+                liveStatus.textContent = '✓ Finger detected - Ready to analyze!';
+                liveStatus.style.color = '#4CAF50';
+                liveStatus.style.fontWeight = '600';
+                
+                // Set quality bar to high (we got a capture)
+                qualityBar.style.width = '100%';
+                qualityBar.style.background = '#4CAF50';
+                qualityText.textContent = 'Good';
+                
+                // Enable capture button
+                captureBtn.disabled = false;
+              }
+            } catch (err) {
+              console.error('Error fetching captured image:', err);
+              liveStatus.textContent = '❌ Failed to fetch image';
+              liveStatus.style.color = '#f44336';
+            }
+            
+          } else if (data.startsWith('ERROR:')) {
+            const errorMsg = data.substring(6);
+            alert('Scanner error: ' + errorMsg);
+            scanStatusText.textContent = 'Error: ' + errorMsg;
+            liveStatus.textContent = '❌ Error: ' + errorMsg;
+            liveStatus.style.color = '#f44336';
+            stopLiveScanning();
+          }
+        };
+        
+        eventSource.onerror = (error) => {
+          console.error('EventSource error:', error);
+          scanStatusText.textContent = 'Connection error - Scanner disconnected';
+          liveStatus.textContent = '❌ Connection lost';
+          liveStatus.style.color = '#f44336';
+          stopLiveScanning();
+        };
+        
+      } catch (err) {
+        alert('Error starting scanner: ' + err.message);
+        scanStatusText.textContent = 'Error: ' + err.message;
+        startScanBtn.disabled = false;
+      }
+    });
+    
+    // Capture from live scan and analyze
+    captureBtn.addEventListener('click', async () => {
+      if (!lastCapturedFrame) {
+        alert('No fingerprint captured yet. Please place finger on scanner.');
+        return;
+      }
+      
+      try {
+        captureBtn.disabled = true;
+        liveStatus.textContent = 'Analyzing fingerprint...';
+        resetUI();
+        statusText.textContent = 'Processing capture...';
+        
+        // Convert base64 back to blob and submit to /detect endpoint
+        const bmpBlob = base64ToBlob(lastCapturedFrame, 'image/bmp');
+        const formData = new FormData();
+        formData.append('file', bmpBlob, 'fingerprint.bmp');
+        
+        const res = await fetch('/detect', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await res.json();
+        
+        // Stop scanning after capture
+        stopLiveScanning();
+        
+        // Display results (reuse existing UI)
+        responseEl.textContent = JSON.stringify(data, null, 2);
+        
+        // Show preview
+        previewEl.src = 'data:image/bmp;base64,' + lastCapturedFrame;
+        
+        // Process results (same as file upload)
+        processDetectionResults(data, res);
+        
+      } catch (err) {
+        alert('Error analyzing: ' + err.message);
+        statusText.textContent = 'Error: ' + err.message;
+        captureBtn.disabled = false;
+      }
+    });
+    
+    // Helper function to convert base64 to Blob
+    function base64ToBlob(base64, mimeType) {
+      const byteCharacters = atob(base64);
+      const byteArrays = [];
+      
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      
+      return new Blob(byteArrays, { type: mimeType });
+    }
+    
+    // Stop live scanning
+    stopScanBtn.addEventListener('click', () => {
+      stopLiveScanning();
+    });
+    
+    async function stopLiveScanning() {
+      isScanning = false;
+      
+      // Close EventSource connection
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      
+      // Reset captured frame
+      lastCapturedFrame = null;
+      
+      // Reset UI
+      startScanBtn.style.display = 'inline-block';
+      stopScanBtn.style.display = 'none';
+      captureBtn.style.display = 'none';
+      livePreviewCard.style.display = 'none';
+      startScanBtn.disabled = false;
+      scanStatusText.textContent = '';
+      livePreview.src = '';
+      qualityBar.style.width = '0%';
+      qualityText.textContent = '0%';
+    }
+    
+    // Process detection results (shared by file upload and live capture)
+    function processDetectionResults(data, res=null) {
+      if ((res && res.status === 422) || data.success === false) {
+          invalidCard.style.display = 'block';
+          const reasons = data.structure?.reasons || [];
+          invalidReasons.innerHTML = reasons.map(r => `<div class="badge fail">${r.code}: ${r.message}</div>`).join(' ') || 'No reasons provided.';
+          invalidMetrics.textContent = JSON.stringify(data.structure?.metrics || {}, null, 2);
+          if (data.quality?.reasons?.length) {
+            invalidReasons.innerHTML += '<br>' + data.quality.reasons.map(r => `<div class="badge warn">${r.code}: ${r.message}</div>`).join(' ');
+          }
+          if (data.error || data.reject_stage) {
+            invalidReasons.innerHTML = `<div class="badge fail">${data.reject_stage || 'rejected'}: ${data.error || 'unknown_error'}</div>` + '<br>' + invalidReasons.innerHTML;
+          }
+          const hints = data.action_hint || [];
+          actionHints.innerHTML = hints.length ? hints.map(h => `• ${h}`).join('<br>') : '';
+          const art = data.analysis_artifacts || {};
+          if (art.url) {
+            artifactLink.innerHTML = `<a class="btn" target="_blank" rel="noopener" href="${art.url}">View saved image</a>`;
+            invalidImg.src = art.url;
+            invalidImg.style.display = 'block';
+          } else {
+            artifactLink.innerHTML = '';
+            invalidImg.style.display = 'none';
+          }
+          const heading = reasons.find(r => /partial|fragment|missing/i.test(r.code || r.message || "")) ? "Partial fingerprint detected" : "Invalid fingerprint – please recapture";
+          invalidTitle.textContent = heading;
+          statusText.textContent = 'Invalid fingerprint – please recapture.';
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+
+        const warnings = (data.warnings || []).concat(data.structure?.warnings || []);
+        if (warnings.length) {
+          statusText.textContent = 'Warning: ' + warnings.map(w => w.code).join(', ');
+          warningCard.style.display = 'block';
+          warningsList.innerHTML = warnings.map(w => `<div class="badge warn">${w.code}: ${w.message || ''}</div>`).join(' ');
+        } else {
+          statusText.textContent = 'Done.';
+          warningCard.style.display = 'none';
+          warningsList.innerHTML = '';
+        }
+
+        if (!data.success) {
+          statusText.textContent = 'Detection failed.';
+          submitBtn.disabled = false;
+          return;
+        }
+
+        const cls = data.classification || {};
+        const predicted = cls.predicted_class;
+        const predictedProb = cls.confidence;
+
+        const adjusted = data.rule_rerank?.rule_adjusted_class || predicted;
+        const adjustedProb = data.rule_rerank?.rule_adjusted_confidence ?? predictedProb;
+
+        const rulePass = data.rule_validation?.rule_pass;
+        const nCore = data.num_cores ?? 0;
+        const nDelta = data.num_deltas ?? 0;
+        const minRidge = getMinRidgeCount(data);
+        const qualityStatus = data.quality?.status ?? "NA";
+        const meanQuality = data.quality?.metrics?.mean_quality;
+        const structMetrics = data.structure?.metrics || {};
+
+        // --- Final card ---
+        finalCard.style.display = 'block';
+        finalTitle.innerHTML = `${adjusted.toUpperCase()} <span>${(adjustedProb*100).toFixed(2)}%</span>`;
+
+        finalBadges.innerHTML = '';
+        finalBadges.appendChild(badge(`Predicted: ${predicted?.toUpperCase() ?? "NA"}`));
+        finalBadges.appendChild(badge(`Cores: ${nCore}`));
+        finalBadges.appendChild(badge(`Deltas: ${nDelta}`));
+        if (minRidge !== null) finalBadges.appendChild(badge(`Min ridge: ${minRidge}`));
+        finalBadges.appendChild(badge(`Quality: ${qualityStatus}`, qualityStatus==="OK" ? "ok" : "warn"));
+        if (structMetrics.fg_ratio_gate !== undefined) {
+          finalBadges.appendChild(badge(`FG ratio: ${structMetrics.fg_ratio_gate.toFixed(2)}`));
+        }
+        if (rulePass === true) {
+          finalBadges.appendChild(badge("CNN vs Rules: Agree ✅", "ok"));
+          finalNote.textContent = "CNN vs Rules: Agree ✅";
+        } else if (rulePass === false) {
+          const suggested = data.rule_inference?.suggested_class?.toUpperCase() || "UNKNOWN";
+          finalBadges.appendChild(badge("CNN vs Rules: Disagree ⚠️", "warn"));
+          finalNote.textContent = `CNN vs Rules: Disagree ⚠️ (structure evidence suggests ${suggested}).`;
+        } else {
+          finalBadges.appendChild(badge("Rules: NA", "warn"));
+          finalNote.textContent = "";
+        }
+
+        const changed = (adjusted && predicted && adjusted !== predicted);
+        if (changed && rulePass !== false) {
+          finalNote.textContent = `Rule engine adjusted the final class from ${predicted.toUpperCase()} → ${adjusted.toUpperCase()}.`;
+        }
+
+        // Handedness note for certain classes
+        const handednessHints = {
+          lu: "Note: LU may appear as RI depending on left/right hand.",
+          au: "Note: AU may appear as AR depending on left/right hand.",
+          wpe: "Note: WPE may appear as RPE depending on left/right hand."
+        };
+        const lowerAdjusted = (adjusted || '').toLowerCase();
+        if (handednessHints[lowerAdjusted]) {
+          finalBadges.appendChild(badge(handednessHints[lowerAdjusted], "warn"));
+        }
+
+        // --- Evidence card ---
+        evidenceCard.style.display = 'block';
+        evCores.textContent = `${nCore}`;
+        evDeltas.textContent = `${nDelta}`;
+        evRidge.textContent = (minRidge === null) ? "NA" : `${minRidge}`;
+        evQuality.textContent = meanQuality !== undefined ? `${qualityStatus} (mean_quality=${meanQuality.toFixed(3)})` : `${qualityStatus}`;
+
+        const coreStr = (data.cores||[]).map(p => `(${p.x.toFixed(1)}, ${p.y.toFixed(1)}) conf=${p.confidence.toFixed(3)}`).join(" | ");
+        const deltaStr = (data.deltas||[]).map(p => `(${p.x.toFixed(1)}, ${p.y.toFixed(1)}) conf=${p.confidence.toFixed(3)}`).join(" | ");
+        evPoints.textContent = `Core points: ${coreStr || "NA"}\nDelta points: ${deltaStr || "NA"}`;
+
+        // --- Model card: Top 5 ---
+        const probs = cls.probabilities || {};
+        const top5 = Object.entries(probs).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+        modelCard.style.display = 'block';
+        probRows.innerHTML = '';
+        top5.forEach(([k,v]) => {
+          const div = document.createElement('div');
+          div.className = 'row' + (k === predicted ? ' highlight' : '');
+          div.innerHTML = `<span>${k.toUpperCase()}</span><span>${(v*100).toFixed(2)}%</span>`;
+          probRows.appendChild(div);
+        });
+
+        // --- Rules card ---
+        rulesCard.style.display = 'block';
+        const desc = PATTERN_RULES[adjusted] || "No description available for this class.";
+        const expectedC = data.rule_validation?.expected_cores;
+        const expectedD = data.rule_validation?.expected_deltas;
+        const observedC = data.rule_validation?.observed_cores;
+        const observedD = data.rule_validation?.observed_deltas;
+
+        rulesSummary.textContent =
+          `Final class: ${adjusted.toUpperCase()} | Expected cores/deltas: ${expectedC ? expectedC.join("-") : "NA"} / ${expectedD ? expectedD.join("-") : "NA"} | ` +
+          `Observed: ${observedC ?? "NA"} / ${observedD ?? "NA"}`;
+
+        // If you added ridge rule evidence later, this message will automatically show because minRidge is displayed.
+        rulesText.textContent =
+          `Definition:\n- ${desc}\n\nConsistency check:\n- rule_pass = ${rulePass}\n\nNotes:\n- Predicted class = ${predicted?.toUpperCase() ?? "NA"}\n- Final class (rule-adjusted) = ${adjusted?.toUpperCase() ?? "NA"}\n`;
+
+        // Consistency note based on detected patterns
+        const patternNote = [];
+        patternNote.push(`Detected cores: ${nCore}, deltas: ${nDelta}`);
+        if (rulePass === true) {
+          patternNote.push("Patterns are consistent with the final class.");
+        } else if (rulePass === false) {
+          patternNote.push("Patterns conflict with the final class; rule engine applied.");
+        } else {
+          patternNote.push("Patterns could not be fully validated.");
+        }
+        rulesText.textContent += `\nConsistency note:\n- ${patternNote.join(" ")}`;
+
+        // --- Overlay ---
+        const overlaySrc = data.overlay_base64
+          ? `data:image/png;base64,${data.overlay_base64}`
+          : data.visualization_url; // backwards compatibility
+        const overlaySrc2 = data.overlay_base64_opencv
+          ? `data:image/jpeg;base64,${data.overlay_base64_opencv}`
+          : null;
+
+        if (overlaySrc) {
+          overlayImg.src = overlaySrc;
+          overlayCard.style.display = 'block';
+        }
+        if (overlaySrc2) {
+          overlayImg2.src = overlaySrc2;
+          overlayImg2.style.display = 'block';
+          overlayCard.style.display = 'block';
+        }
+
+        statusText.textContent = 'Done.';
+    }
+    
+    // File upload handler
+    submitBtn.addEventListener('click', async () => {
+      const file = fileInput.files[0];
+      if (!file) return alert('Please choose a fingerprint image first.');
+
+      resetUI();
+      submitBtn.disabled = true;
+      statusText.textContent = 'Processing...';
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch(`/detect`, { method: 'POST', body: formData });
+        const data = await res.json();
+        responseEl.textContent = JSON.stringify(data, null, 2);
+        
+        processDetectionResults(data, res);
+        
+      } catch (err) {
+        statusText.textContent = 'Error.';
+        responseEl.textContent = 'Error: ' + err;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
+
+
