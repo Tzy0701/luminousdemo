@@ -922,51 +922,130 @@ def login_page():
 
 def mode_selection_page():
     """
-    New intermediate page to select input mode
+    New intermediate page to select input mode (Styled Version)
     """
-    # 顶部简单的 Header
-    st.markdown(f"<div style='text-align: center; padding-top: 2rem; margin-bottom: 3rem;'><h2 style='font-family:Inter;font-size:36px;'>Hi, {st.session_state.username}!</h2><p style='color:#666; font-size:18px;'>Choose your capture method to continue</p></div>", unsafe_allow_html=True)
-
-    # 创建两列布局
-    col1, col2, col3 = st.columns([1, 4, 1]) # 让中间宽一点，或者直接用下面这种居中布局
+    # 1. 注入专门针对此页面的 CSS
+    st.markdown("""
+    <style>
+    /* 卡片容器样式 */
+    .mode-card {
+        background-color: white;
+        border-radius: 20px;
+        padding: 3rem 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        border: 2px solid #F7FAFC;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
     
-    # 更好的布局：两个大卡片居中
-    with col2:
-        c1, c2 = st.columns(2, gap="large")
+    /* 鼠标悬停效果 */
+    .mode-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        border-color: #E2E8F0;
+    }
+
+    /* 图标背景圆圈 */
+    .icon-circle {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 48px;
+        margin: 0 auto 1.5rem auto;
+        transition: transform 0.3s ease;
+    }
+    
+    .mode-card:hover .icon-circle {
+        transform: scale(1.1);
+    }
+
+    /* 不同的颜色主题 */
+    .theme-purple { background: linear-gradient(135deg, #F3F0FF 0%, #E9D8FD 100%); color: #6B46C1; }
+    .theme-blue { background: linear-gradient(135deg, #EBF8FF 0%, #BEE3F8 100%); color: #3182CE; }
+
+    /* 文字样式 */
+    .card-title { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 24px; color: #2D3748; margin-bottom: 0.5rem; }
+    .card-desc { font-family: 'Poppins', sans-serif; font-size: 14px; color: #718096; margin-bottom: 2rem; line-height: 1.5; }
+    
+    /* 隐藏 Streamlit 原生容器的 padding 以便自定义 */
+    div[data-testid="column"] { gap: 2rem; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 2. Header 区域
+    st.markdown(f"""
+    <div style='text-align: center; padding-top: 4rem; margin-bottom: 4rem;'>
+        <h2 style='font-family: Poppins, sans-serif; font-size: 42px; font-weight: 600; color: #1A202C; margin-bottom: 10px;'>
+            Hi, {st.session_state.username}!
+        </h2>
+        <p style='color: #718096; font-size: 18px; font-weight: 400;'>
+            How would you like to capture fingerprints today?
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 3. 卡片布局 (使用 1:1:1:1 布局让中间两个居中)
+    _, col_touch, col_cam, _ = st.columns([1, 2, 2, 1], gap="large")
+    
+    # === Touchbased Card ===
+    with col_touch:
+        # 使用 HTML 渲染视觉部分
+        st.markdown("""
+        <div class="mode-card">
+            <div class="icon-circle theme-purple">👆</div>
+            <div class="card-title">Touchbased</div>
+            <div class="card-desc">
+                High-precision capture using<br>
+                ZKTeco Hardware Scanner
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # === Touchbased Card ===
-        with c1:
-            with st.container(border=True):
-                st.markdown("<div style='text-align:center; height:150px; display:flex; flex-direction:column; justify-content:center; align-items:center;'>", unsafe_allow_html=True)
-                st.markdown("<div style='font-size: 60px; margin-bottom: 10px;'>👆</div>", unsafe_allow_html=True)
-                st.markdown("<h3 style='margin:0;'>Touchbased</h3>", unsafe_allow_html=True)
-                st.markdown("<p style='color:#888; font-size:14px;'>Hardware Scanner</p>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                if st.button("Select Scanner", use_container_width=True, type="primary", key="btn_touchbased"):
-                    st.session_state.input_mode = "Touchbased"
-                    st.rerun()
+        # 按钮放在卡片下方 (Streamlit 按钮很难完美嵌入 HTML div，这是最稳妥的布局)
+        st.markdown("<div style='margin-top: -60px; position: relative; z-index: 2; padding: 0 3rem;'>", unsafe_allow_html=True)
+        if st.button("Select Scanner", use_container_width=True, type="primary", key="btn_touchbased"):
+            st.session_state.input_mode = "Touchbased"
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        # === Touchless Card ===
-        with c2:
-            with st.container(border=True):
-                st.markdown("<div style='text-align:center; height:150px; display:flex; flex-direction:column; justify-content:center; align-items:center;'>", unsafe_allow_html=True)
-                st.markdown("<div style='font-size: 60px; margin-bottom: 10px;'>📸</div>", unsafe_allow_html=True)
-                st.markdown("<h3 style='margin:0;'>Touchless</h3>", unsafe_allow_html=True)
-                st.markdown("<p style='color:#888; font-size:14px;'>Camera Capture</p>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                if st.button("Select Camera", use_container_width=True, type="primary", key="btn_touchless"):
-                    st.session_state.input_mode = "Touchless"
-                    st.rerun()
+    # === Touchless Card ===
+    with col_cam:
+        # 使用 HTML 渲染视觉部分
+        st.markdown("""
+        <div class="mode-card">
+            <div class="icon-circle theme-blue">📸</div>
+            <div class="card-title">Touchless</div>
+            <div class="card-desc">
+                Contactless capture using<br>
+                Mobile / Web Camera
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 按钮
+        st.markdown("<div style='margin-top: -60px; position: relative; z-index: 2; padding: 0 3rem;'>", unsafe_allow_html=True)
+        if st.button("Select Camera", use_container_width=True, type="primary", key="btn_touchless"):
+            st.session_state.input_mode = "Touchless"
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # 底部返回按钮
-    st.markdown("<div style='margin-top: 3rem; text-align: center;'>", unsafe_allow_html=True)
-    if st.button("← Logout", type="secondary"):
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.session_state.input_mode = None
-        st.rerun()
+    # 4. 底部 Logout 区域
+    st.markdown("<div style='margin-top: 5rem; text-align: center;'>", unsafe_allow_html=True)
+    _, b_col, _ = st.columns([3, 1, 3])
+    with b_col:
+        if st.button("Log out", type="secondary", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.session_state.input_mode = None
+            st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
         
 # Helper function to save fingerprint to its own folder
