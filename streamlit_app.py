@@ -1302,7 +1302,7 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
     # =========================================================
     if not st.session_state[captured_key]:
         
-        # --- 分支 1: Touchbased (Scanner) ---
+        # --- 分支 1: Touchbased (Scanner) - [完全保留原样] ---
         if current_mode == "Touchbased":
             col1, col2 = st.columns([1, 1], gap="small")
             with col1:
@@ -1341,7 +1341,7 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                 # 1. 读取图片
                 bytes_data = camera_file.getvalue()
                 
-                # 2. [新增] 强制旋转为 Portrait (竖屏)
+                # 2. [保持] 强制旋转为 Portrait (竖屏)
                 try:
                     img = Image.open(io.BytesIO(bytes_data))
                     # 如果宽度大于高度 (Landscape)，则逆时针旋转90度
@@ -1372,14 +1372,17 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
     # 状态 B: 已采集图像 (预览 + 保存)
     # =========================================================
     else:
-        # After capture: Show preview with Save, Recapture, Analyze buttons
-        col1, col2, col3 = st.columns([1, 1, 1], gap="small")
+        # [修改] 移除了 Analyze 按钮，只保留 Save 和 Retake
+        # 布局改为两列
+        col1, col2 = st.columns([1, 1], gap="small")
         
         with col1:
+            # 这里的 "Save" 按钮会触发 analyze_fingerprint，后者会自动判断走 Cloud 还是 Local
             if st.button("💾 Save", use_container_width=True, type="primary", 
                         disabled=st.session_state[saved_key], key=f"save_{finger_key}"):
                 if validate_fingerprint_data(st.session_state[captured_key]):
                     with st.spinner("💾 Saving & Analyzing..."):
+                        # 1. 保存图片到本地
                         folder_path = save_fingerprint_to_folder(
                             finger_key, 
                             finger_name, 
@@ -1387,6 +1390,7 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                         )
                         
                         if folder_path:
+                            # 2. 更新 Session State
                             st.session_state.fingerprints[finger_key] = {
                                 "finger_id": finger_key,
                                 "finger_code": finger_name.split()[0],
@@ -1399,20 +1403,20 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                             }
                             st.session_state[saved_key] = True
                             
-                            # AUTO-ANALYZE
-                            with st.spinner("🔬 Auto-analyzing..."):
-                                analysis_result = analyze_fingerprint(
-                                    finger_key, 
-                                    st.session_state[captured_key], 
-                                    folder_path
-                                )
-                                if analysis_result:
-                                    st.session_state.fingerprints[finger_key]["analysis"] = analysis_result
+                            # 3. 自动分析 (调用你刚才修改好的支持 Cloud 的 analyze_fingerprint)
+                            analysis_result = analyze_fingerprint(
+                                finger_key, 
+                                st.session_state[captured_key], 
+                                folder_path
+                            )
+                            
+                            if analysis_result:
+                                st.session_state.fingerprints[finger_key]["analysis"] = analysis_result
                             
                             st.success(f"✅ Saved! ({len(st.session_state.fingerprints)}/10)")
                             time.sleep(1)
                             
-                            # Cleanup
+                            # 4. 清理并刷新
                             st.session_state[captured_key] = None
                             st.session_state[saved_key] = False
                             if f"analysis_{finger_key}" in st.session_state:
@@ -1432,68 +1436,15 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                 if f"analysis_{finger_key}" in st.session_state:
                     del st.session_state[f"analysis_{finger_key}"]
                 st.rerun()
-        
-        with col3:
-            if st.button("🔍 Analyze", use_container_width=True, key=f"analyze_{finger_key}"):
-                st.session_state[f"analysis_{finger_key}"] = "running"
-                st.rerun()
 
-    # Show preview
+    # Show Preview (Image Only, Analysis results show after saving)
     if st.session_state[captured_key]:
-        # Check if analysis should run
-        if st.session_state.get(analysis_key) == "running":
-            with st.spinner("Analyzing..."):
-                try:
-                    img_bytes = base64.b64decode(st.session_state[captured_key])
-                    files = {"file": ("fingerprint.bmp", io.BytesIO(img_bytes), "image/bmp")}
-                    # Note: Using same API endpoint for now
-                    response = requests.post(f"{API_BASE}/detect", files=files, timeout=30)
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        st.session_state[analysis_key] = result
-                        if st.session_state[saved_key] and finger_key in st.session_state.fingerprints:
-                            st.session_state.fingerprints[finger_key]["analysis"] = result
-                    else:
-                        st.session_state[analysis_key] = {"error": "Analysis failed"}
-                except Exception as e:
-                    st.session_state[analysis_key] = {"error": str(e)}
-            st.rerun()
-    
-        has_analysis = analysis_key in st.session_state and st.session_state[analysis_key] not in ["running", None]
-        
-        if has_analysis:
-            img_col, ana_col = st.columns([1, 1], gap="small")
-            with img_col:
-                try:
-                    img_data = base64.b64decode(st.session_state[captured_key])
-                    img = Image.open(io.BytesIO(img_data))
-                    # 显示时确保是 Portrait
-                    st.image(img, caption="📸 Captured", use_container_width=True, clamp=True)
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-            
-            with ana_col:
-                result = st.session_state[analysis_key]
-                if result.get("success"):
-                    classification = result.get("classification", {})
-                    st.markdown("**📊 Analysis**")
-                    st.metric("Pattern", classification.get("predicted_class", "?").upper())
-                    st.metric("Confidence", f"{classification.get('confidence', 0) * 100:.0f}%")
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.metric("Cores", result.get("num_cores", 0))
-                    with col_b:
-                        st.metric("Deltas", result.get("num_deltas", 0))
-                elif result.get("error"):
-                    st.error(f"❌ {result.get('error')}")
-        else:
-            try:
-                img_data = base64.b64decode(st.session_state[captured_key])
-                img = Image.open(io.BytesIO(img_data))
-                st.image(img, caption="📸 Captured Preview", use_container_width=True, clamp=True)
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+        try:
+            img_data = base64.b64decode(st.session_state[captured_key])
+            img = Image.open(io.BytesIO(img_data))
+            st.image(img, caption="📸 Captured Preview", use_container_width=True, clamp=True)
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
     else:
         # Placeholder for scanner mode
         if current_mode == "Touchbased":
