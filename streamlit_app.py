@@ -1469,10 +1469,28 @@ def dashboard_page():
     with h1: 
         st.markdown(f"<div style='padding-top:2rem;'><h2 style='font-family:Inter;font-size:32px;color:black;'>{st.session_state.username.upper()}</h2></div>", unsafe_allow_html=True)
         
-        # [新增] 切换模式按钮
+        # [修改] 显示当前模式 + 返回按钮(带清除功能)
         st.caption(f"Mode: **{mode}**")
-        if st.button("🔄 Switch Mode", key="switch_mode_dboard", type="secondary"):
+        
+        # 将按钮改名为 "⬅️ Back"
+        if st.button("⬅️ Back", key="switch_mode_dboard", type="secondary", help="Return to selection and clear data"):
+            # 1. 重置模式 (让它跳回选择页)
             st.session_state.input_mode = None
+            
+            # 2. [核心] 清空所有已采集的指纹数据 (图片和缓存)
+            st.session_state.fingerprints = {} 
+            
+            # 3. 重置其他辅助状态
+            st.session_state.scan_result = None
+            st.session_state.show_summary = False
+            
+            # 4. 清理可能残留的正在扫描的状态
+            keys_to_clear = ['active_scan_finger', 'active_scan_name', 'active_scan_is_rescan']
+            for k in keys_to_clear:
+                if k in st.session_state:
+                    del st.session_state[k]
+            
+            # 5. 刷新页面
             st.rerun()
 
     with h2: 
