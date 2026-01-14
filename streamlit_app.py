@@ -663,7 +663,7 @@ def init_session_state():
     if 'show_summary' not in st.session_state:
         st.session_state.show_summary = False
     if 'input_mode' not in st.session_state:
-        st.session_state.input_mode = "Touchbased"
+        st.session_state.input_mode = None
 
 # Display fingerprint section for each hand
 def display_fingerprint_section(hand, num_fingers):
@@ -887,108 +887,88 @@ def display_fingerprint_section(hand, num_fingers):
 
 # Login Page
 def login_page():
-    # Create two equal columns for split layout
     left_col, right_col = st.columns([1, 1])
-    
-    # LEFT SIDE - Logo + Form
     with left_col:
-        # Container with no top padding
-        st.markdown("""
-        <div style='
-            max-width: 404px;
-            margin: 0 auto;
-        '>
-        """, unsafe_allow_html=True)
-        
-        # Logo
+        st.markdown("<div style='max-width: 404px; margin: 0 auto;'>", unsafe_allow_html=True)
         logo_path = Path("WebImages/luminous-logo-withname.png")
         if logo_path.exists():
-            logo = Image.open(logo_path)
-            st.image(logo, width=200)
-        
-        # Spacing between logo and heading
+            st.image(Image.open(logo_path), width=200)
         st.markdown("<div style='margin-top: 2.5rem; margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<h1 class='page-heading'>Welcome Back</h1>", unsafe_allow_html=True)
         
-        # Heading
-        st.markdown("<h1 class='page-heading'>Get Started Now</h1>", unsafe_allow_html=True)
-        
-        # Form Frame using container with border
-# Form Frame
-    with st.container(border=True):
-        # Name input
-        username = st.text_input(
-            "Name",
-            placeholder="Enter your name",
-            key="username_input"
-        )
-        
-        # [新增] 模式选择 Radio Button
-        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-        st.markdown("<label style='font-size:14px; font-weight:600;'>Select Input Mode</label>", unsafe_allow_html=True)
-        
-        # 使用 columns 让选项横向排列，看起来更整洁
-        mode_col1, mode_col2 = st.columns(2)
-        with mode_col1:
-            is_touchbased = st.checkbox("Touchbased (Scanner)", value=True, key="chk_touchbased")
-        with mode_col2:
-            # 实现互斥逻辑有点麻烦，建议直接用 Radio
-            pass 
-
-        # 推荐使用 Radio，代码更简洁：
-        input_mode = st.radio(
-            "Mode Selection", # Label hidden by visibility hidden css if needed, or explicitly shown
-            options=["Touchbased (Scanner)", "Touchless (Camera)"],
-            index=0,
-            label_visibility="collapsed" 
-        )
-        
-        # Sign In button
-        if st.button("Sign In", use_container_width=True, type="primary"):
-            if username and username.strip():
-                st.session_state.logged_in = True
-                st.session_state.username = username.strip()
-                
-                # [新增] 保存用户选择的模式
-                if "Camera" in input_mode:
-                    st.session_state.input_mode = "Touchless"
+        with st.container(border=True):
+            username = st.text_input("Name", placeholder="Enter your name", key="username_input")
+            
+            # [修改] 移除了这里的 Radio Button 选择代码
+            
+            if st.button("Sign In", use_container_width=True, type="primary"):
+                if username and username.strip():
+                    st.session_state.logged_in = True
+                    st.session_state.username = username.strip()
+                    # 注意：这里不设置 input_mode，跳转到选择页去设置
+                    st.rerun()
                 else:
-                    st.session_state.input_mode = "Touchbased"
-                    
-                st.rerun()
-            else:
-                st.error("⚠️ Please enter your name")
-
-        # Bottom tagline (outside frame)
-        st.markdown("""
-        <div style='margin-top: 2rem; text-align: center;'>
-            <p style='color: #A0AEC0; font-size: 14px; margin: 0;'>
-                Secure • Fast • Accurate Fingerprint Analysis
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+                    st.error("⚠️ Please enter your name")
         
+        st.markdown("<div style='margin-top: 2rem; text-align: center;'><p style='color: #A0AEC0; font-size: 14px;'>Secure • Fast • Accurate Fingerprint Analysis</p></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # RIGHT SIDE - Fingerprint Illustration (aligned with left top)
     with right_col:
-        # Align with left side top, center horizontally
-        st.markdown("""
-        <div style='
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-        '>
-        """, unsafe_allow_html=True)
-        
-        # Display fingerprint illustration - Fully responsive, follows zoom
+        st.markdown("<div style='display: flex; align-items: flex-start; justify-content: center;'>", unsafe_allow_html=True)
         illustration_path = Path("WebImages/Luminous-Start.png")
         if illustration_path.exists():
-            illustration = Image.open(illustration_path)
-            # Fully responsive - no clamp, follows zoom in/out
-            st.image(illustration, use_container_width=True)
-        
+            st.image(Image.open(illustration_path), use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
+def mode_selection_page():
+    """
+    New intermediate page to select input mode
+    """
+    # 顶部简单的 Header
+    st.markdown(f"<div style='text-align: center; padding-top: 2rem; margin-bottom: 3rem;'><h2 style='font-family:Inter;font-size:36px;'>Hi, {st.session_state.username}!</h2><p style='color:#666; font-size:18px;'>Choose your capture method to continue</p></div>", unsafe_allow_html=True)
+
+    # 创建两列布局
+    col1, col2, col3 = st.columns([1, 4, 1]) # 让中间宽一点，或者直接用下面这种居中布局
+    
+    # 更好的布局：两个大卡片居中
+    with col2:
+        c1, c2 = st.columns(2, gap="large")
+        
+        # === Touchbased Card ===
+        with c1:
+            with st.container(border=True):
+                st.markdown("<div style='text-align:center; height:150px; display:flex; flex-direction:column; justify-content:center; align-items:center;'>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size: 60px; margin-bottom: 10px;'>👆</div>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin:0;'>Touchbased</h3>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#888; font-size:14px;'>Hardware Scanner</p>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                
+                if st.button("Select Scanner", use_container_width=True, type="primary", key="btn_touchbased"):
+                    st.session_state.input_mode = "Touchbased"
+                    st.rerun()
+
+        # === Touchless Card ===
+        with c2:
+            with st.container(border=True):
+                st.markdown("<div style='text-align:center; height:150px; display:flex; flex-direction:column; justify-content:center; align-items:center;'>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size: 60px; margin-bottom: 10px;'>📸</div>", unsafe_allow_html=True)
+                st.markdown("<h3 style='margin:0;'>Touchless</h3>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#888; font-size:14px;'>Camera Capture</p>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                
+                if st.button("Select Camera", use_container_width=True, type="primary", key="btn_touchless"):
+                    st.session_state.input_mode = "Touchless"
+                    st.rerun()
+
+    # 底部返回按钮
+    st.markdown("<div style='margin-top: 3rem; text-align: center;'>", unsafe_allow_html=True)
+    if st.button("← Logout", type="secondary"):
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.session_state.input_mode = None
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+        
 # Helper function to save fingerprint to its own folder
 def save_fingerprint_to_folder(finger_key, finger_name, image_base64):
     """
@@ -1508,45 +1488,22 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
             """, unsafe_allow_html=True)
 # Dashboard Page - Fingerprint Input
 def dashboard_page():
-    # Header section with username and logo
-    header_col1, header_col2, header_col3 = st.columns([2, 3, 2])
+    h1, h2, h3 = st.columns([2, 3, 2])
+    with h1: 
+        st.markdown(f"<div style='padding-top:2rem;'><h2 style='font-family:Inter;font-size:32px;color:black;'>{st.session_state.username.upper()}</h2></div>", unsafe_allow_html=True)
+        # [新增] 显示当前模式并允许切换
+        st.caption(f"Mode: {st.session_state.input_mode}")
+        if st.button("🔄 Switch Mode", key="switch_mode_btn", type="secondary"):
+            st.session_state.input_mode = None # 重置模式
+            st.rerun()
+
+    with h2: 
+        st.markdown("<div style='padding-top:2rem;text-align:center;'><h1 style='font-family:Inter;font-size:48px;color:black;'>Fingerprint Input</h1></div>", unsafe_allow_html=True)
     
-    with header_col1:
-        # Username in upper left
-        st.markdown(f"""
-        <div style='padding-top: 2rem;'>
-            <h2 style='
-                font-family: Inter, sans-serif;
-                font-size: 32px;
-                font-weight: 400;
-                color: #000000;
-                margin: 0;
-            '>{st.session_state.username.upper()}</h2>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with header_col2:
-        # "Fingerprint Input" centered heading
-        st.markdown("""
-        <div style='padding-top: 2rem; text-align: center; display: flex; justify-content: center;'>
-            <h1 style='
-                font-family: Inter, sans-serif;
-                font-size: 48px;
-                font-weight: 400;
-                color: #000000;
-                margin: 0;
-                text-align: center;
-            '>Fingerprint Input</h1>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with header_col3:
-        # Logo in top right
-        logo_path = Path("WebImages/luminous-logo-withname.png")
-        if logo_path.exists():
-            st.markdown("<div style='padding-top: 1.5rem;'></div>", unsafe_allow_html=True)
-            logo = Image.open(logo_path)
-            st.image(logo, width=150)
+    with h3:
+        if Path("WebImages/luminous-logo-withname.png").exists():
+            st.markdown("<div style='padding-top:1.5rem;'></div>", unsafe_allow_html=True)
+            st.image(Image.open("WebImages/luminous-logo-withname.png"), width=150)
     
     # First purple line - after header
     st.markdown("""
@@ -2496,12 +2453,15 @@ def main():
     load_css()
     init_session_state()
     
-    # Show API configuration in sidebar after login
     if st.session_state.logged_in:
         show_api_config()
     
+    # 页面跳转逻辑
     if not st.session_state.logged_in:
         login_page()
+    elif st.session_state.input_mode is None:
+        # [新增] 如果已登录但未选择模式，显示选择页
+        mode_selection_page()
     elif st.session_state.show_summary:
         summary_report_page()
     else:
@@ -2509,4 +2469,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
