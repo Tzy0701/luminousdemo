@@ -2084,8 +2084,8 @@ def summary_report_page():
 def display_summary_section(hand, num_fingers, mode, rankings):
     """
     Display summary section.
-    - Touchbased: Shows 5 columns (Original logic)
-    - Touchless: Shows 2 columns (Redesigned Modern UI)
+    - Touchbased: Shows 5 columns (Original logic with Magnifier)
+    - Touchless: Shows 2 columns (Modern UI, no Magnifier)
     """
     fingers = ["Thumb", "Index", "Middle", "Ring", "Little"]
     finger_codes = ["1", "2", "3", "4", "5"]
@@ -2112,14 +2112,14 @@ def display_summary_section(hand, num_fingers, mode, rankings):
         if analysis and analysis.get("success"):
             cls = analysis.get("classification", {})
             pattern_code = cls.get("predicted_class", "N/A").upper() # 简写: LU
-            # 获取全名
+            # 获取全名 (处理大小写不一致的情况)
             pattern_display = pattern_map.get(pattern_code.lower(), pattern_code) 
             confidence = cls.get("confidence", 0) * 100
 
         with st.container(border=True):
             
             # =========================================================
-            # 分支 A: Touchbased (保持原样，完全不动)
+            # 分支 A: Touchbased (保持原样，5列布局)
             # =========================================================
             if mode == "Touchbased":
                 c1, c2, c3, c4, c5 = st.columns([1, 1.5, 1.5, 1, 1])
@@ -2128,7 +2128,7 @@ def display_summary_section(hand, num_fingers, mode, rankings):
                     if finger_code in st.session_state.fingerprints:
                         try:
                             img = Image.open(io.BytesIO(base64.b64decode(fp_data["image_base64"])))
-                            # 只有 Touchbased 保留放大镜
+                            # Touchbased 保留放大镜功能
                             if st.button("🔍", key=f"v_{finger_code}"): 
                                 st.session_state[f"show_{finger_code}"] = not st.session_state.get(f"show_{finger_code}", False)
                             st.image(img, width=60)
@@ -2142,54 +2142,57 @@ def display_summary_section(hand, num_fingers, mode, rankings):
                 with c5: st.markdown(f"<p style='padding-top:10px;'><strong>Rank</strong><br>{rank}</p>", unsafe_allow_html=True)
 
             # =========================================================
-            # 分支 B: Touchless (全新设计: 更美观、不空洞)
+            # 分支 B: Touchless (全新设计: 2列布局，修复代码显示问题)
             # =========================================================
             else:
-                # 调整比例：图片占 1，信息占 1.5 (让内容更紧凑)
-                c1, c2 = st.columns([1, 1.5])
+                # 调整比例：左图右文
+                c1, c2 = st.columns([1, 2])
                 
-                # Column 1: 图片 (变大，且不需要放大镜)
+                # Column 1: 图片 (大图，无放大镜)
                 with c1:
                     if finger_code in st.session_state.fingerprints:
                         try:
                             img_data = base64.b64decode(fp_data["image_base64"])
                             img = Image.open(io.BytesIO(img_data))
-                            # use_container_width=True 让图片撑满列宽，看起来更大气
+                            # 图片撑满列宽，看起来清晰
                             st.image(img, use_container_width=True)
                         except: 
                             st.error("Img Error")
                     else:
                         st.write("No Image")
 
-                # Column 2: 信息 (使用 HTML/CSS 美化排版)
+                # Column 2: 信息 (漂亮的 HTML 排版)
                 with c2:
                     # 根据置信度决定颜色 (高=绿，中=蓝)
-                    badge_bg = "#DCFCE7" if confidence > 80 else "#DBEAFE"
-                    badge_text = "#166534" if confidence > 80 else "#1E40AF"
+                    if confidence > 80:
+                        badge_color = "#DCFCE7" # 浅绿背景
+                        text_color = "#166534"  # 深绿文字
+                    else:
+                        badge_color = "#DBEAFE" # 浅蓝背景
+                        text_color = "#1E40AF"  # 深蓝文字
                     
-                    st.markdown(f"""
-                    <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; padding-top: 5px;">
-                        <div style="font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                    # 使用 HTML 渲染，注意 unsafe_allow_html=True 是必须的
+                    html_content = f"""
+                    <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; padding-top: 0px;">
+                        <div style="font-family: sans-serif; font-size: 14px; font-weight: 600; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">
                             {finger_code} • {finger_name}
                         </div>
-                        
-                        <div style="font-family: 'Poppins', sans-serif; font-size: 32px; font-weight: 700; color: #1E293B; line-height: 1.1;">
+                        <div style="font-family: sans-serif; font-size: 36px; font-weight: 700; color: #1E293B; line-height: 1.2;">
                             {pattern_code}
                         </div>
-                        
-                        <div style="font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 500; color: #475569; margin-bottom: 12px;">
+                        <div style="font-family: sans-serif; font-size: 16px; font-weight: 500; color: #475569; margin-bottom: 12px;">
                             {pattern_display}
                         </div>
-                        
                         <div>
-                            <span style="background-color: {badge_bg}; color: {badge_text}; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600;">
+                            <span style="background-color: {badge_color}; color: {text_color}; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600;">
                                 {confidence:.0f}% Confidence
                             </span>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """
+                    st.markdown(html_content, unsafe_allow_html=True)
 
-            # Overlay Expand (仅 Touchbased 需要，Touchless 暂时没有 Overlay，所以这个判断实际上只会对 Touchbased 生效)
+            # Overlay Expand (仅 Touchbased 需要，Touchless 忽略)
             if mode == "Touchbased" and st.session_state.get(f"show_{finger_code}", False):
                 if analysis.get("overlay_base64"):
                     try:
@@ -2197,6 +2200,7 @@ def display_summary_section(hand, num_fingers, mode, rankings):
                         if "data:image" in d: d = d.split(",")[1]
                         st.image(Image.open(io.BytesIO(base64.b64decode(d))), caption=f"{finger_code} Analysis Overlay", use_container_width=True)
                     except: st.error("Overlay error")
+                        
 # Main App
 def main():
     load_css()
