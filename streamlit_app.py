@@ -1007,78 +1007,112 @@ def save_fingerprint_to_folder(finger_key, finger_name, image_base64):
 
 # Helper function to run fingerprint analysis
 def analyze_fingerprint(finger_key, image_base64, folder_path):
-    """
-    Run classification and Poincaré index detection on fingerprint.
-    Saves results to folder and returns analysis data.
-    """
-    API_BASE = API_URL  # Use configured API endpoint
+    CLOUD_API_URL = "https://tzy0701-fingerprint-api.hf.space" 
     
-    try:
-        # Convert base64 to bytes
-        img_bytes = base64.b64decode(image_base64)
-        
-        # Send to API for analysis
-        files = {"file": ("fingerprint.bmp", io.BytesIO(img_bytes), "image/bmp")}
-        
-        print(f"🔬 Analyzing {finger_key}...")
-        print(f"   Image size: {len(img_bytes)} bytes")
-        print(f"   Calling API: {API_BASE}/detect")
-        
-        response = requests.post(f"{API_BASE}/detect", files=files, timeout=60)
-        
-        print(f"   API Response: {response.status_code}")
-        
-        if response.status_code == 200:
-            result = response.json()
+    # 检查是 Touchless 还是 Touchbased
+    mode = st.session_state.get("input_mode", "Touchbased")
+    
+    if mode == "Touchless":
+        # === Touchless 走新的云端 API ===
+        try:
+            img_bytes = base64.b64decode(image_base64)
+            files = {"file": ("fingerprint.jpg", io.BytesIO(img_bytes), "image/jpeg")}
             
-            # Debug: Print key results
-            print(f"   Success: {result.get('success')}")
-            print(f"   Classification: {result.get('classification', {}).get('predicted_class', 'N/A')}")
-            print(f"   Confidence: {result.get('classification', {}).get('confidence', 0):.2f}")
-            print(f"   Cores: {result.get('num_cores', 0)}")
-            print(f"   Deltas: {result.get('num_deltas', 0)}")
-            print(f"   Ridge Counts: {result.get('ridge_counts', [])}")
-            print(f"   Has Overlay: {bool(result.get('overlay_base64'))}")
+            # 调用云端
+            response = requests.post(f"{CLOUD_API_URL}/predict", files=files, timeout=60)
             
-            # Save analysis results to folder
-            if folder_path:
-                results_path = Path(folder_path) / "analysis_results.json"
-                with open(results_path, 'w') as f:
-                    json.dump(result, f, indent=2)
-                print(f"   Saved results to: {results_path}")
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    # 构造兼容的返回格式
+                    return {
+                        "success": True,
+                        "classification": {
+                            "predicted_class": result["prediction"],
+                            "confidence": float(result["confidence"].strip('%')) / 100
+                        },
+                        "num_cores": 0, "num_deltas": 0, "ridge_counts": [], "overlay_base64": None
+                    }
+                else:
+                    return {"success": False, "error": result.get("error")}
+            else:
+                return {"success": False, "error": f"Cloud API Error: {response.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+            
+    else:
+        """
+        Run classification and Poincaré index detection on fingerprint.
+        Saves results to folder and returns analysis data.
+        """
+        API_BASE = API_URL  # Use configured API endpoint
+        
+        try:
+            # Convert base64 to bytes
+            img_bytes = base64.b64decode(image_base64)
+            
+            # Send to API for analysis
+            files = {"file": ("fingerprint.bmp", io.BytesIO(img_bytes), "image/bmp")}
+            
+            print(f"🔬 Analyzing {finger_key}...")
+            print(f"   Image size: {len(img_bytes)} bytes")
+            print(f"   Calling API: {API_BASE}/detect")
+            
+            response = requests.post(f"{API_BASE}/detect", files=files, timeout=60)
+            
+            print(f"   API Response: {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
                 
-                # Save overlay image if available
-                if result.get("overlay_base64"):
-                    overlay_data = result["overlay_base64"]
-                    if overlay_data.startswith("data:image"):
-                        overlay_data = overlay_data.split(",")[1]
-                    overlay_bytes = base64.b64decode(overlay_data)
-                    overlay_path = Path(folder_path) / "detection_overlay.png"
-                    with open(overlay_path, 'wb') as f:
-                        f.write(overlay_bytes)
-                    print(f"   Saved overlay to: {overlay_path}")
-            
-            return result
-        else:
-            error_msg = f"Analysis failed for {finger_key}: HTTP {response.status_code}"
+                # Debug: Print key results
+                print(f"   Success: {result.get('success')}")
+                print(f"   Classification: {result.get('classification', {}).get('predicted_class', 'N/A')}")
+                print(f"   Confidence: {result.get('classification', {}).get('confidence', 0):.2f}")
+                print(f"   Cores: {result.get('num_cores', 0)}")
+                print(f"   Deltas: {result.get('num_deltas', 0)}")
+                print(f"   Ridge Counts: {result.get('ridge_counts', [])}")
+                print(f"   Has Overlay: {bool(result.get('overlay_base64'))}")
+                
+                # Save analysis results to folder
+                if folder_path:
+                    results_path = Path(folder_path) / "analysis_results.json"
+                    with open(results_path, 'w') as f:
+                        json.dump(result, f, indent=2)
+                    print(f"   Saved results to: {results_path}")
+                    
+                    # Save overlay image if available
+                    if result.get("overlay_base64"):
+                        overlay_data = result["overlay_base64"]
+                        if overlay_data.startswith("data:image"):
+                            overlay_data = overlay_data.split(",")[1]
+                        overlay_bytes = base64.b64decode(overlay_data)
+                        overlay_path = Path(folder_path) / "detection_overlay.png"
+                        with open(overlay_path, 'wb') as f:
+                            f.write(overlay_bytes)
+                        print(f"   Saved overlay to: {overlay_path}")
+                
+                return result
+            else:
+                error_msg = f"Analysis failed for {finger_key}: HTTP {response.status_code}"
+                print(f"   ❌ {error_msg}")
+                try:
+                    error_detail = response.json()
+                    print(f"   Error detail: {error_detail}")
+                except:
+                    print(f"   Response text: {response.text[:200]}")
+                return None
+                
+        except requests.exceptions.ConnectionError as e:
+            error_msg = f"❌ Cannot connect to API at {API_BASE}. Is the backend running?"
+            print(error_msg)
+            return {"error": error_msg, "success": False}
+        except Exception as e:
+            error_msg = f"Error analyzing fingerprint {finger_key}: {str(e)}"
             print(f"   ❌ {error_msg}")
-            try:
-                error_detail = response.json()
-                print(f"   Error detail: {error_detail}")
-            except:
-                print(f"   Response text: {response.text[:200]}")
-            return None
-            
-    except requests.exceptions.ConnectionError as e:
-        error_msg = f"❌ Cannot connect to API at {API_BASE}. Is the backend running?"
-        print(error_msg)
-        return {"error": error_msg, "success": False}
-    except Exception as e:
-        error_msg = f"Error analyzing fingerprint {finger_key}: {str(e)}"
-        print(f"   ❌ {error_msg}")
-        import traceback
-        traceback.print_exc()
-        return {"error": error_msg, "success": False}
+            import traceback
+            traceback.print_exc()
+            return {"error": error_msg, "success": False}
 
 # Helper function to analyze all fingerprints
 def analyze_all_fingerprints(progress_callback=None):
