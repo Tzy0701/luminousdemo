@@ -1228,15 +1228,17 @@ def capture_fingerprint_once():
         return None, f"Error: {str(e)}"
 
 # Scanning Dialog Function
+# [Updated] Unified Scan Dialog with Auto-Portrait Rotation
 @st.dialog("Scan Fingerprint", width="medium")
 def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
     """
     Modal dialog for scanning a fingerprint.
     Supports both 'Touchbased' (Java Scanner) and 'Touchless' (Camera).
+    Includes Auto-Portrait rotation for camera images.
     """
     API_BASE = API_URL  # Use configured API endpoint
     
-    # [新增] 获取当前模式
+    # 获取当前模式
     current_mode = st.session_state.get("input_mode", "Touchbased")
     
     # Compact header
@@ -1246,12 +1248,12 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
             {current_mode} - {'Rescanning' if is_rescan else 'Scanning'}: {finger_name}
         </h3>
         <p style='color: #666; font-size: 10px; margin: 0.1rem 0 0 0; padding: 0; line-height: 1.1;'>
-            Click "Start Scan" or use Camera • Record ID: {finger_key}
+            ID: {finger_key}
         </p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Initialize scanning state - UNIQUE PER FINGER to prevent mixing
+    # Initialize scanning state
     captured_key = f"captured_image_{finger_key}"
     saved_key = f"scan_saved_{finger_key}"
     analysis_key = f"analysis_{finger_key}"
@@ -1262,31 +1264,27 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
         st.session_state[saved_key] = False
     
     # =========================================================
-    # 状态 A: 尚未采集图像 (显示 扫描按钮 或 摄像头)
+    # 状态 A: 尚未采集图像
     # =========================================================
     if not st.session_state[captured_key]:
         
-        # --- 分支 1: Touchbased (原有 Java 逻辑) ---
+        # --- 分支 1: Touchbased (Scanner) ---
         if current_mode == "Touchbased":
             col1, col2 = st.columns([1, 1], gap="small")
             with col1:
                 if st.button("🟢 Start Scan", use_container_width=True, type="primary", key=f"start_{finger_key}"):
-                    # Show scanning status
                     with st.status("🔄 Scanning...", expanded=True) as status:
                         st.write("🟢 Place finger and hold still")
-                        
-                        # Call CaptureOnce - this blocks until capture completes
                         b64_data, error = capture_fingerprint_once()
                         
                         if b64_data:
                             st.session_state[captured_key] = b64_data
                             status.update(label="✓ Captured!", state="complete", expanded=False)
-                            # Rerun to show the preview and action buttons
                             time.sleep(0.3)
                             st.rerun()
                         else:
                             status.update(label="❌ Capture failed", state="error", expanded=True)
-                            st.error(f"Error: {error}. Check scanner connection and try again.")
+                            st.error(f"Error: {error}. Check scanner connection.")
             
             with col2:
                 if st.button("❌ Cancel", use_container_width=True, key=f"cancel_{finger_key}"):
@@ -1294,12 +1292,11 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                         del st.session_state.active_scan_finger
                     st.rerun()
 
-        # --- 分支 2: Touchless (摄像头逻辑) ---
+        # --- 分支 2: Touchless (Camera with Iriun) ---
         else:
-            st.info("📸 Please center your finger clearly in the camera frame.")
+            st.info("📸 Please allow camera access. Select **'Iriun Webcam'** if available.")
             
             # 摄像头组件
-            # 当拍照后，camera_file 会变成一个 UploadedFile 对象
             camera_file = st.camera_input(
                 label="Fingerprint Camera", 
                 key=f"cam_{finger_key}", 
@@ -1307,36 +1304,48 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
             )
             
             if camera_file:
-                # 1. 读取二进制数据
+                # 1. 读取图片
                 bytes_data = camera_file.getvalue()
-                # 2. 转换为 Base64 字符串 (保持与 Scanner 数据格式一致)
-                b64_data = base64.b64encode(bytes_data).decode('utf-8')
-                # 3. 存入 Session
-                st.session_state[captured_key] = b64_data
-                # 4. 刷新页面，进入预览流程
-                st.rerun()
+                
+                # 2. [新增] 强制旋转为 Portrait (竖屏)
+                try:
+                    img = Image.open(io.BytesIO(bytes_data))
+                    # 如果宽度大于高度 (Landscape)，则逆时针旋转90度
+                    if img.width > img.height:
+                        img = img.rotate(-90, expand=True)
+                    
+                    # 转回 bytes
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    final_bytes = buf.getvalue()
+                    
+                    # 3. 转 Base64 存入 Session
+                    b64_data = base64.b64encode(final_bytes).decode('utf-8')
+                    st.session_state[captured_key] = b64_data
+                    
+                    # 4. 刷新进入预览
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error processing image: {e}")
             
-            # 摄像头模式下的 Cancel 按钮
             if st.button("❌ Cancel", use_container_width=True, key=f"cancel_cam_{finger_key}"):
                 if 'active_scan_finger' in st.session_state:
                     del st.session_state.active_scan_finger
                 st.rerun()
 
     # =========================================================
-    # 状态 B: 已采集图像 (显示预览 + 保存/重拍) - 逻辑通用
+    # 状态 B: 已采集图像 (预览 + 保存)
     # =========================================================
     else:
         # After capture: Show preview with Save, Recapture, Analyze buttons
-        # Very compact button layout - minimal gap
         col1, col2, col3 = st.columns([1, 1, 1], gap="small")
         
         with col1:
             if st.button("💾 Save", use_container_width=True, type="primary", 
                         disabled=st.session_state[saved_key], key=f"save_{finger_key}"):
-                # Validate fingerprint data before saving
                 if validate_fingerprint_data(st.session_state[captured_key]):
-                    with st.spinner("💾 Saving fingerprint to folder..."):
-                        # Save to folder structure
+                    with st.spinner("💾 Saving & Analyzing..."):
                         folder_path = save_fingerprint_to_folder(
                             finger_key, 
                             finger_name, 
@@ -1344,7 +1353,6 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                         )
                         
                         if folder_path:
-                            # Save to session state with unique key
                             st.session_state.fingerprints[finger_key] = {
                                 "finger_id": finger_key,
                                 "finger_code": finger_name.split()[0],
@@ -1353,13 +1361,11 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                                 "timestamp": time.time(),
                                 "scan_number": 1 if finger_key not in st.session_state.fingerprints else st.session_state.fingerprints[finger_key].get("scan_number", 0) + 1,
                                 "folder_path": str(folder_path),
-                                "source": current_mode  # [新增] 记录数据来源
+                                "source": current_mode
                             }
                             st.session_state[saved_key] = True
                             
-                            # AUTO-ANALYZE after saving
-                            # 注意：Touchless 模式暂时也调用同一个 analyze 函数
-                            # 虽然 API 可能不适配，但这是"页面一致"的要求
+                            # AUTO-ANALYZE
                             with st.spinner("🔬 Auto-analyzing..."):
                                 analysis_result = analyze_fingerprint(
                                     finger_key, 
@@ -1369,12 +1375,10 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                                 if analysis_result:
                                     st.session_state.fingerprints[finger_key]["analysis"] = analysis_result
                             
-                            # Show compact success message
-                            captured_count = len(st.session_state.fingerprints)
-                            st.success(f"✅ Saved & Analyzed! ({captured_count}/10)")
-                            time.sleep(1)  # Brief pause to show success message
+                            st.success(f"✅ Saved! ({len(st.session_state.fingerprints)}/10)")
+                            time.sleep(1)
                             
-                            # Cleanup and close dialog
+                            # Cleanup
                             st.session_state[captured_key] = None
                             st.session_state[saved_key] = False
                             if f"analysis_{finger_key}" in st.session_state:
@@ -1383,26 +1387,24 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                                 del st.session_state.active_scan_finger
                             st.rerun()
                         else:
-                            st.error("❌ Save failed. Try again.")
+                            st.error("❌ Save failed.")
                 else:
-                    st.error("❌ Invalid data. Rescan.")
+                    st.error("❌ Invalid data.")
 
         with col2:
-            if st.button("🔄 Recapture", use_container_width=True, key=f"recapture_{finger_key}"):
+            if st.button("🔄 Retake", use_container_width=True, key=f"recapture_{finger_key}"):
                 st.session_state[captured_key] = None
                 st.session_state[saved_key] = False
-                # Clear analysis result
                 if f"analysis_{finger_key}" in st.session_state:
                     del st.session_state[f"analysis_{finger_key}"]
                 st.rerun()
         
         with col3:
             if st.button("🔍 Analyze", use_container_width=True, key=f"analyze_{finger_key}"):
-                # Store analysis result in session state for this finger
                 st.session_state[f"analysis_{finger_key}"] = "running"
                 st.rerun()
 
-    # Show preview - centered initially, side-by-side after analysis
+    # Show preview
     if st.session_state[captured_key]:
         # Check if analysis should run
         if st.session_state.get(analysis_key) == "running":
@@ -1410,12 +1412,12 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                 try:
                     img_bytes = base64.b64decode(st.session_state[captured_key])
                     files = {"file": ("fingerprint.bmp", io.BytesIO(img_bytes), "image/bmp")}
+                    # Note: Using same API endpoint for now
                     response = requests.post(f"{API_BASE}/detect", files=files, timeout=30)
                     
                     if response.status_code == 200:
                         result = response.json()
                         st.session_state[analysis_key] = result
-                        # Update fingerprint with analysis if already saved
                         if st.session_state[saved_key] and finger_key in st.session_state.fingerprints:
                             st.session_state.fingerprints[finger_key]["analysis"] = result
                     else:
@@ -1424,23 +1426,20 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                     st.session_state[analysis_key] = {"error": str(e)}
             st.rerun()
     
-        # Check if analysis has been done
         has_analysis = analysis_key in st.session_state and st.session_state[analysis_key] not in ["running", None]
         
         if has_analysis:
-            # Side-by-side: Image on left, analysis on right
-            img_col, analysis_col = st.columns([1, 1], gap="small")
-            
+            img_col, ana_col = st.columns([1, 1], gap="small")
             with img_col:
                 try:
                     img_data = base64.b64decode(st.session_state[captured_key])
                     img = Image.open(io.BytesIO(img_data))
+                    # 显示时确保是 Portrait
                     st.image(img, caption="📸 Captured", use_container_width=True, clamp=True)
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
             
-            with analysis_col:
-                # Show analysis results
+            with ana_col:
                 result = st.session_state[analysis_key]
                 if result.get("success"):
                     classification = result.get("classification", {})
@@ -1455,7 +1454,6 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                 elif result.get("error"):
                     st.error(f"❌ {result.get('error')}")
         else:
-            # No analysis yet: Show centered image only
             try:
                 img_data = base64.b64decode(st.session_state[captured_key])
                 img = Image.open(io.BytesIO(img_data))
@@ -1463,22 +1461,13 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
             except Exception as e:
                 st.error(f"Error: {str(e)}")
     else:
-        # Initial state (Only when Touchbased, as camera mode shows camera input instead)
+        # Placeholder for scanner mode
         if current_mode == "Touchbased":
             st.markdown("""
             <div style='
-                width: 100%;
-                height: 300px;
-                max-height: 40vh;
-                background: #f5f5f5;
-                border: 2px dashed #ccc;
-                border-radius: 8px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: #999;
-                font-size: 14px;
-                margin-top: 0.5rem;
+                width: 100%; height: 300px; max-height: 40vh;
+                background: #f5f5f5; border: 2px dashed #ccc; border-radius: 8px;
+                display: flex; align-items: center; justify-content: center; color: #999;
             '>
                 <div style='text-align: center;'>
                     <div style='font-size: 48px; margin-bottom: 0.5rem;'>👆</div>
@@ -1486,6 +1475,7 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            
 # Dashboard Page - Fingerprint Input
 def dashboard_page():
     mode = st.session_state.get("input_mode", "Touchbased")
