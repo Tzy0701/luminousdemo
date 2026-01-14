@@ -2084,66 +2084,119 @@ def summary_report_page():
 def display_summary_section(hand, num_fingers, mode, rankings):
     """
     Display summary section.
-    - Touchbased: Shows 5 columns (Image, Finger, Pattern, RC, Rank)
-    - Touchless: Shows 2 columns (Image, Info)
+    - Touchbased: Shows 5 columns (Original logic)
+    - Touchless: Shows 2 columns (Redesigned Modern UI)
     """
     fingers = ["Thumb", "Index", "Middle", "Ring", "Little"]
     finger_codes = ["1", "2", "3", "4", "5"]
-    pattern_map = {"wpe": "Whorl Peacock Eye", "ws": "Whorl Spiral", "wd": "Whorl Double Loop", "we": "Whorl Elongated", "lu": "Loop Ulnar", "au": "Loop Radial", "at": "Tented Arch", "as": "Simple Arch"}
+    
+    # 完整的名称映射
+    pattern_map = {
+        "wpe": "Whorl Peacock Eye", "ws": "Whorl Spiral", "wd": "Whorl Double Loop", 
+        "we": "Whorl Elongated", "lu": "Loop Ulnar", "au": "Loop Radial", 
+        "at": "Tented Arch", "as": "Simple Arch"
+    }
 
     for i in range(num_fingers):
-        finger_name, finger_code = fingers[i], f"{'R' if hand == 'right' else 'L'}{finger_codes[i]}"
+        finger_name = fingers[i]
+        finger_code = f"{'R' if hand == 'right' else 'L'}{finger_codes[i]}"
+        
+        # Get data
         fp_data = st.session_state.fingerprints.get(finger_code, {})
         analysis = fp_data.get("analysis", {})
         
-        pattern_code, pattern_display, confidence = "N/A", "Pending", 0
+        pattern_code = "N/A"
+        pattern_display = "Pending"
+        confidence = 0
+        
         if analysis and analysis.get("success"):
             cls = analysis.get("classification", {})
-            pattern_code = cls.get("predicted_class", "N/A")
-            pattern_display = pattern_map.get(pattern_code, pattern_code.upper())
+            pattern_code = cls.get("predicted_class", "N/A").upper() # 简写: LU
+            # 获取全名
+            pattern_display = pattern_map.get(pattern_code.lower(), pattern_code) 
             confidence = cls.get("confidence", 0) * 100
 
         with st.container(border=True):
-            # === Touchbased (5列完整版) ===
+            
+            # =========================================================
+            # 分支 A: Touchbased (保持原样，完全不动)
+            # =========================================================
             if mode == "Touchbased":
                 c1, c2, c3, c4, c5 = st.columns([1, 1.5, 1.5, 1, 1])
+                
                 with c1:
                     if finger_code in st.session_state.fingerprints:
                         try:
                             img = Image.open(io.BytesIO(base64.b64decode(fp_data["image_base64"])))
-                            if st.button("🔍", key=f"v_{finger_code}"): st.session_state[f"show_{finger_code}"] = not st.session_state.get(f"show_{finger_code}", False)
+                            # 只有 Touchbased 保留放大镜
+                            if st.button("🔍", key=f"v_{finger_code}"): 
+                                st.session_state[f"show_{finger_code}"] = not st.session_state.get(f"show_{finger_code}", False)
                             st.image(img, width=60)
                         except: st.write("Error")
+                        
                 with c2: st.markdown(f"<p style='padding-top:10px;'><strong>Finger: {finger_code}</strong></p>", unsafe_allow_html=True)
                 with c3: st.markdown(f"<p style='padding-top:10px;'><strong>{pattern_display}</strong><br><span style='font-size:12px;color:#888'>{confidence:.0f}%</span></p>", unsafe_allow_html=True)
                 rc = max(analysis.get("ridge_counts", []) or [0]) if analysis else 0
                 with c4: st.markdown(f"<p style='padding-top:10px;'><strong>RC</strong><br>{rc}</p>", unsafe_allow_html=True)
                 rank = rankings.get(finger_code, "-")
                 with c5: st.markdown(f"<p style='padding-top:10px;'><strong>Rank</strong><br>{rank}</p>", unsafe_allow_html=True)
-            
-            # === Touchless (2列极简版) ===
+
+            # =========================================================
+            # 分支 B: Touchless (全新设计: 更美观、不空洞)
+            # =========================================================
             else:
-                c1, c2 = st.columns([1, 3])
+                # 调整比例：图片占 1，信息占 1.5 (让内容更紧凑)
+                c1, c2 = st.columns([1, 1.5])
+                
+                # Column 1: 图片 (变大，且不需要放大镜)
                 with c1:
                     if finger_code in st.session_state.fingerprints:
                         try:
-                            img = Image.open(io.BytesIO(base64.b64decode(fp_data["image_base64"])))
-                            if st.button("🔍", key=f"v_{finger_code}"): st.session_state[f"show_{finger_code}"] = not st.session_state.get(f"show_{finger_code}", False)
-                            st.image(img, width=80)
-                        except: st.write("Err")
-                with c2:
-                    color = "#10B981" if confidence > 80 else "#3B82F6"
-                    st.markdown(f"<div style='margin-top:5px;'><span style='font-weight:600; font-size:16px;'>{finger_code} - {finger_name}</span><br><span style='font-size:22px; font-weight:700; color:{color};'>{pattern_display}</span><span style='font-size:12px; color:#999; margin-left:8px;'>({confidence:.0f}%)</span></div>", unsafe_allow_html=True)
+                            img_data = base64.b64decode(fp_data["image_base64"])
+                            img = Image.open(io.BytesIO(img_data))
+                            # use_container_width=True 让图片撑满列宽，看起来更大气
+                            st.image(img, use_container_width=True)
+                        except: 
+                            st.error("Img Error")
+                    else:
+                        st.write("No Image")
 
-            # Overlay Expand (通用)
-            if st.session_state.get(f"show_{finger_code}", False):
+                # Column 2: 信息 (使用 HTML/CSS 美化排版)
+                with c2:
+                    # 根据置信度决定颜色 (高=绿，中=蓝)
+                    badge_bg = "#DCFCE7" if confidence > 80 else "#DBEAFE"
+                    badge_text = "#166534" if confidence > 80 else "#1E40AF"
+                    
+                    st.markdown(f"""
+                    <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; padding-top: 5px;">
+                        <div style="font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                            {finger_code} • {finger_name}
+                        </div>
+                        
+                        <div style="font-family: 'Poppins', sans-serif; font-size: 32px; font-weight: 700; color: #1E293B; line-height: 1.1;">
+                            {pattern_code}
+                        </div>
+                        
+                        <div style="font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 500; color: #475569; margin-bottom: 12px;">
+                            {pattern_display}
+                        </div>
+                        
+                        <div>
+                            <span style="background-color: {badge_bg}; color: {badge_text}; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600;">
+                                {confidence:.0f}% Confidence
+                            </span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Overlay Expand (仅 Touchbased 需要，Touchless 暂时没有 Overlay，所以这个判断实际上只会对 Touchbased 生效)
+            if mode == "Touchbased" and st.session_state.get(f"show_{finger_code}", False):
                 if analysis.get("overlay_base64"):
                     try:
                         d = analysis["overlay_base64"]
                         if "data:image" in d: d = d.split(",")[1]
-                        st.image(Image.open(io.BytesIO(base64.b64decode(d))), caption=f"{finger_code} Overlay", use_container_width=True)
+                        st.image(Image.open(io.BytesIO(base64.b64decode(d))), caption=f"{finger_code} Analysis Overlay", use_container_width=True)
                     except: st.error("Overlay error")
-
 # Main App
 def main():
     load_css()
