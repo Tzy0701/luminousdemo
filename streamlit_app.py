@@ -1488,18 +1488,23 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
             """, unsafe_allow_html=True)
 # Dashboard Page - Fingerprint Input
 def dashboard_page():
+mode = st.session_state.get("input_mode", "Touchbased")
+
     h1, h2, h3 = st.columns([2, 3, 2])
     with h1: 
         st.markdown(f"<div style='padding-top:2rem;'><h2 style='font-family:Inter;font-size:32px;color:black;'>{st.session_state.username.upper()}</h2></div>", unsafe_allow_html=True)
-        # [新增] 显示当前模式并允许切换
-        st.caption(f"Mode: {st.session_state.input_mode}")
-        if st.button("🔄 Switch Mode", key="switch_mode_btn", type="secondary"):
-            st.session_state.input_mode = None # 重置模式
+        
+        # [新增] 切换模式按钮
+        st.caption(f"Mode: **{mode}**")
+        if st.button("🔄 Switch Mode", key="switch_mode_dboard", type="secondary"):
+            st.session_state.input_mode = None
             st.rerun()
 
     with h2: 
-        st.markdown("<div style='padding-top:2rem;text-align:center;'><h1 style='font-family:Inter;font-size:48px;color:black;'>Fingerprint Input</h1></div>", unsafe_allow_html=True)
-    
+        # [新增] 标题根据模式变化
+        title = "Fingerprint Input" if mode == "Touchbased" else "Touchless Capture"
+        st.markdown(f"<div style='padding-top:2rem;text-align:center;'><h1 style='font-family:Inter;font-size:48px;color:black;'>{title}</h1></div>", unsafe_allow_html=True)
+   
     with h3:
         if Path("WebImages/luminous-logo-withname.png").exists():
             st.markdown("<div style='padding-top:1.5rem;'></div>", unsafe_allow_html=True)
@@ -1956,476 +1961,182 @@ def calculate_ridge_count_rankings():
 def summary_report_page():
     """Display summary report of all captured fingerprints"""
     
-    # Validate all fingerprints are present
+    # 1. 获取当前模式
+    mode = st.session_state.get("input_mode", "Touchbased")
+    
+    # 2. 校验数据
     if not all_fingerprints_captured():
         st.error("⚠️ Error: Not all fingerprints are captured. Please return to input page.")
         if st.button("← Back to Fingerprint Input"):
             st.session_state.show_summary = False
             st.rerun()
         return
-    
-    # Calculate rankings based on ridge counts (1=highest, 10=lowest)
-    ridge_count_rankings = calculate_ridge_count_rankings()
-    
-    # Header section with username and logo
+
+    # 3. 准备数据：只有 Touchbased 需要计算排名
+    ridge_count_rankings = {}
+    if mode == "Touchbased":
+        ridge_count_rankings = calculate_ridge_count_rankings()
+
+    # 4. Header Section
     header_col1, header_col2, header_col3 = st.columns([2, 3, 2])
     
     with header_col1:
-        # Username in upper left
-        st.markdown(f"""
-        <div style='padding-top: 2rem;'>
-            <h2 style='
-                font-family: Inter, sans-serif;
-                font-size: 32px;
-                font-weight: 400;
-                color: #000000;
-                margin: 0;
-            '>{st.session_state.username.upper()}</h2>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div style='padding-top: 2rem;'><h2 style='font-family: Inter, sans-serif; font-size: 32px; font-weight: 400; color: #000000; margin: 0;'>{st.session_state.username.upper()}</h2></div>", unsafe_allow_html=True)
     
     with header_col2:
-        # "Summary Report" centered heading
-        st.markdown("""
-        <div style='padding-top: 2rem; text-align: center; display: flex; justify-content: center;'>
-            <h1 style='
-                font-family: Inter, sans-serif;
-                font-size: 48px;
-                font-weight: 400;
-                color: #000000;
-                margin: 0;
-                text-align: center;
-            '>Summary Report</h1>
-        </div>
-        """, unsafe_allow_html=True)
+        title_suffix = "(Scanner)" if mode == "Touchbased" else "(Touchless)"
+        st.markdown(f"<div style='padding-top: 2rem; text-align: center;'><h1 style='font-family: Inter, sans-serif; font-size: 48px; font-weight: 400; color: #000000; margin: 0;'>Summary Report <br><span style='font-size:20px;color:#666;'>{title_suffix}</span></h1></div>", unsafe_allow_html=True)
     
     with header_col3:
-        # Logo in top right
-        logo_path = Path("WebImages/luminous-logo-withname.png")
-        if logo_path.exists():
+        if Path("WebImages/luminous-logo-withname.png").exists():
             st.markdown("<div style='padding-top: 1.5rem;'></div>", unsafe_allow_html=True)
-            logo = Image.open(logo_path)
-            st.image(logo, width=150)
+            st.image(Image.open("WebImages/luminous-logo-withname.png"), width=150)
+
+    # Touchless 专属提示
+    if mode == "Touchless":
+        st.info("💡 Note: Touchless mode focuses on Pattern Classification. Ridge Counts are excluded.")
+
+    # 5. Main Content (左右手布局)
+    st.markdown("<hr style='border: none; border-top: 3px solid #664ED0; margin: 2rem 0 1.5rem 0;'>", unsafe_allow_html=True)
     
-    # Debug: Show available fingerprints
-    with st.expander("🐛 Debug: Fingerprint & Analysis Status", expanded=False):
-        st.write("**Available fingerprints in session state:**")
-        if st.session_state.fingerprints:
-            for key, data in st.session_state.fingerprints.items():
-                has_image = "image_base64" in data and data["image_base64"] is not None
-                analysis = data.get("analysis", {})
-                has_analysis = "analysis" in data and analysis.get("success")
-                
-                # Show detailed analysis status
-                if has_analysis:
-                    pattern = analysis.get("classification", {}).get("predicted_class", "N/A")
-                    confidence = analysis.get("classification", {}).get("confidence", 0)
-                    cores = analysis.get("num_cores", 0)
-                    deltas = analysis.get("num_deltas", 0)
-                    ridge_counts_list = analysis.get("ridge_counts", [])
-                    has_overlay = bool(analysis.get("overlay_base64"))
-                    
-                    # Calculate maximum RC
-                    max_rc = max(ridge_counts_list) if ridge_counts_list else 0
-                    rank = ridge_count_rankings.get(key, "N/A")
-                    
-                    st.write(f"✅ **{key}**: Image={has_image}, Analysis=✓, **Rank={rank}**")
-                    st.write(f"   - Pattern: {pattern} ({confidence*100:.1f}%)")
-                    st.write(f"   - Cores: {cores}, Deltas: {deltas}")
-                    st.write(f"   - Ridge Counts: {ridge_counts_list} → Max: {max_rc}")
-                    st.write(f"   - Has Overlay: {has_overlay}")
-                elif "analysis" in data and not analysis.get("success"):
-                    error_msg = analysis.get("error", "Unknown error")
-                    st.write(f"❌ **{key}**: Image={has_image}, Analysis=Failed")
-                    st.write(f"   - Error: {error_msg}")
-                else:
-                    st.write(f"⏳ **{key}**: Image={has_image}, Analysis=Not yet run")
-        else:
-            st.write("❌ No fingerprints in session state!")
-        
-        st.write("\n**Expected keys:** R1, R2, R3, R4, R5, L1, L2, L3, L4, L5")
-        
-        # Show ranking table
-        st.write("\n**📊 Ridge Count Rankings (1=Highest, 10=Lowest):**")
-        ranking_data = []
-        for finger_code in ["R1", "R2", "R3", "R4", "R5", "L1", "L2", "L3", "L4", "L5"]:
-            fp_data = st.session_state.fingerprints.get(finger_code, {})
-            analysis = fp_data.get("analysis", {})
-            if analysis and analysis.get("success"):
-                ridge_counts_list = analysis.get("ridge_counts", [])
-                max_rc = max(ridge_counts_list) if ridge_counts_list else 0
-            else:
-                max_rc = 0
-            rank = ridge_count_rankings.get(finger_code, "N/A")
-            ranking_data.append(f"{rank}. {finger_code}: {max_rc}")
-        
-        # Sort by rank for display
-        ranking_data.sort()
-        for line in ranking_data:
-            st.write(f"   {line}")
-        
-        # Test API connection
-        st.write(f"\n**API Endpoint:** `{API_URL}`")
-        if st.button("🔌 Test API Connection", key="test_api_btn"):
-            try:
-                response = requests.get(f"{API_URL}/", timeout=5)
-                if response.status_code == 200:
-                    st.success(f"✅ API is reachable at {API_URL}!")
-                else:
-                    st.warning(f"⚠️ API responded with status {response.status_code}")
-            except requests.exceptions.ConnectionError:
-                st.error(f"❌ Cannot connect to API at {API_URL} - Is the backend running on the server?")
-            except Exception as e:
-                st.error(f"❌ Error testing API: {e}")
+    t1, t2 = st.columns(2)
+    with t1: st.markdown("<h3 style='text-align:center;font-family:Inter;font-size:32px;color:black;'>Left Brain / Right Hand</h3>", unsafe_allow_html=True)
+    with t2: st.markdown("<h3 style='text-align:center;font-family:Inter;font-size:32px;color:black;'>Right Brain / Left Hand</h3>", unsafe_allow_html=True)
     
-    # First purple line - after header
-    st.markdown("""
-    <hr style='
-        border: none;
-        border-top: 3px solid #664ED0;
-        margin: 2rem 0 1.5rem 0;
-    '>
-    """, unsafe_allow_html=True)
+    st.markdown("<hr style='border: none; border-top: 3px solid #664ED0; margin: 0 0 2rem 0;'>", unsafe_allow_html=True)
     
-    # Section titles row
-    title_left, title_right = st.columns(2)
+    l_col, sep, r_col = st.columns([49, 2, 49])
     
-    with title_left:
-        st.markdown("""
-        <h3 style='
-            font-family: Inter, sans-serif;
-            font-size: 32px;
-            font-weight: 400;
-            color: #000000;
-            text-align: center;
-            margin: 0.5rem 0 1rem 0;
-        '>Left Brain / Right Hand</h3>
-        """, unsafe_allow_html=True)
+    # 关键修改：传入 mode 和 rankings
+    with l_col: 
+        display_summary_section("right", 5, mode, ridge_count_rankings)
     
-    with title_right:
-        st.markdown("""
-        <h3 style='
-            font-family: Inter, sans-serif;
-            font-size: 32px;
-            font-weight: 400;
-            color: #000000;
-            text-align: center;
-            margin: 0.5rem 0 1rem 0;
-        '>Right Brain / Left Hand</h3>
-        """, unsafe_allow_html=True)
+    with sep: 
+        st.markdown("<div style='width: 3px; height: 100%; min-height: 500px; background: #664ED0; margin: 0 auto; position: relative; top: 0;'></div>", unsafe_allow_html=True)
     
-    # Purple horizontal divider line below titles
-    st.markdown("""
-    <hr style='
-        border: none;
-        border-top: 3px solid #664ED0;
-        margin: 0 0 2rem 0;
-    '>
-    """, unsafe_allow_html=True)
+    with r_col: 
+        display_summary_section("left", 5, mode, ridge_count_rankings)
     
-    # Main content area with vertical separator
-    left_section, separator_col, right_section = st.columns([49, 2, 49])
+    # 6. Footer & TRC (逻辑分流)
+    st.markdown("<hr style='border: none; border-top: 3px solid #664ED0; margin: 3rem 0 2rem 0;'>", unsafe_allow_html=True)
     
-    # Calculate total ridge counts
-    left_brain_trc = 0
-    right_brain_trc = 0
+    # [Touchbased] 显示 TRC 总分
+    if mode == "Touchbased":
+        trc1, trc2 = st.columns(2)
+        with trc1: st.markdown(f"<h3 style='text-align:center;'>Left Brain TRC = {calculate_hand_trc('right')}</h3>", unsafe_allow_html=True)
+        with trc2: st.markdown(f"<h3 style='text-align:center;'>Right Brain TRC = {calculate_hand_trc('left')}</h3>", unsafe_allow_html=True)
+        st.markdown("<hr style='border: none; border-top: 3px solid #664ED0; margin: 2rem 0 2rem 0;'>", unsafe_allow_html=True)
     
-    with left_section:
-        # Display right hand (R1-R5) fingerprints
-        display_summary_section("right", 5, left_brain_trc, ridge_count_rankings)
-    
-    with separator_col:
-        # Vertical purple divider line in the middle
-        st.markdown("""
-        <div style='
-            width: 3px;
-            height: 100%;
-            min-height: 700px;
-            background: #664ED0;
-            margin: 0 auto;
-            position: relative;
-            top: 0;
-        '></div>
-        """, unsafe_allow_html=True)
-    
-    with right_section:
-        # Display left hand (L1-L5) fingerprints
-        display_summary_section("left", 5, right_brain_trc, ridge_count_rankings)
-    
-    # Purple line before TRC section
-    st.markdown("""
-    <hr style='
-        border: none;
-        border-top: 3px solid #664ED0;
-        margin: 3rem 0 2rem 0;
-    '>
-    """, unsafe_allow_html=True)
-    
-    # Total Ridge Count section
-    trc_left, trc_right = st.columns(2)
-    
-    with trc_left:
-        # Calculate Left Brain TRC (right hand R1-R5)
-        left_trc_value = calculate_hand_trc("right")
-        st.markdown(f"""
-        <h3 style='
-            font-family: Inter, sans-serif;
-            font-size: 32px;
-            font-weight: 400;
-            color: #000000;
-            text-align: center;
-            margin: 0.5rem 0 1rem 0;
-        '>Left Brain TRC = {left_trc_value}</h3>
-        """, unsafe_allow_html=True)
-    
-    with trc_right:
-        # Calculate Right Brain TRC (left hand L1-L5)
-        right_trc_value = calculate_hand_trc("left")
-        st.markdown(f"""
-        <h3 style='
-            font-family: Inter, sans-serif;
-            font-size: 32px;
-            font-weight: 400;
-            color: #000000;
-            text-align: center;
-            margin: 0.5rem 0 1rem 0;
-        '>Right Brain TRC = {right_trc_value}</h3>
-        """, unsafe_allow_html=True)
-    
-    # Purple line after TRC
-    st.markdown("""
-    <hr style='
-        border: none;
-        border-top: 3px solid #664ED0;
-        margin: 2rem 0 2rem 0;
-    '>
-    """, unsafe_allow_html=True)
-    
-    # Back button
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button("← Back to Fingerprint Input", use_container_width=True, key="back_btn"):
+    # Back Button
+    _, b_col, _ = st.columns([1, 2, 1])
+    with b_col:
+        if st.button("← Back to Input", use_container_width=True, key="back_btn"):
             st.session_state.show_summary = False
             st.rerun()
 
-# Helper function to display summary section
-def display_summary_section(hand, num_fingers, trc_accumulator, ridge_count_rankings):
-    """Display summary information for each finger in a hand"""
+
+def display_summary_section(hand, num_fingers, mode, rankings):
+    """
+    Display summary section.
+    - Touchbased: Shows 5 columns (Image, Finger, Pattern, RC, Rank)
+    - Touchless: Shows 2 columns (Image, Info)
+    """
     fingers = ["Thumb", "Index", "Middle", "Ring", "Little"]
     finger_codes = ["1", "2", "3", "4", "5"]
     
+    pattern_map = {
+        "wpe": "Whorl Peacock Eye", "ws": "Whorl Spiral", "wd": "Whorl Double Loop", "we": "Whorl Elongated",
+        "lu": "Loop Ulnar", "au": "Loop Radial", "at": "Tented Arch", "as": "Simple Arch"
+    }
+
     for i in range(num_fingers):
         finger_name = fingers[i]
         finger_code = f"{'R' if hand == 'right' else 'L'}{finger_codes[i]}"
         
-        # Create a container for each fingerprint row
+        # Get data
+        fp_data = st.session_state.fingerprints.get(finger_code, {})
+        analysis = fp_data.get("analysis", {})
+        
+        # Basic Info extraction
+        pattern_code = "N/A"
+        pattern_display = "Pending"
+        confidence = 0
+        
+        if analysis and analysis.get("success"):
+            cls = analysis.get("classification", {})
+            pattern_code = cls.get("predicted_class", "N/A")
+            pattern_display = pattern_map.get(pattern_code, pattern_code.upper())
+            confidence = cls.get("confidence", 0) * 100
+
         with st.container(border=True):
-            # Get fingerprint data if available (using finger_code as unique key)
-            fp_data = st.session_state.fingerprints.get(finger_code, {})
-            analysis = fp_data.get("analysis", {})
             
-            # Extract information
-            pattern = "N/A"
-            ridge_count = 0
-            rank = "N/A"
-            
-            if analysis and analysis.get("success"):
-                classification = analysis.get("classification", {})
-                pattern = classification.get("predicted_class", "N/A").upper()
+            # ====== 分支 A: Touchbased (保持完全原样) ======
+            if mode == "Touchbased":
+                col1, col2, col3, col4, col5 = st.columns([1, 1.5, 1.5, 1, 1])
                 
-                # Get ridge counts
-                ridge_counts = analysis.get("ridge_counts", [])
-                if ridge_counts:
-                    ridge_count = max(ridge_counts)  # Use MAXIMUM RC (not average)
+                # 1. Image
+                with col1:
+                    if finger_code in st.session_state.fingerprints:
+                        try:
+                            img_data = base64.b64decode(fp_data["image_base64"])
+                            img = Image.open(io.BytesIO(img_data))
+                            if st.button("🔍", key=f"v_{finger_code}"): 
+                                st.session_state[f"show_{finger_code}"] = not st.session_state.get(f"show_{finger_code}", False)
+                            st.image(img, width=60)
+                        except: st.write("Error")
                 
-                # Get rank from pre-calculated rankings (1-10 based on ridge count)
-                rank = ridge_count_rankings.get(finger_code, "N/A")
-            
-            # Display in 4 columns: Image | Finger | Pattern | RC | Rank
-            col1, col2, col3, col4, col5 = st.columns([1, 1.5, 1.5, 1, 1])
-            
-            with col1:
-                # Fingerprint thumbnail - clickable to show detection overlay
-                if finger_code in st.session_state.fingerprints:
-                    try:
-                        img_base64 = fp_data["image_base64"]
-                        img_data = base64.b64decode(img_base64)
-                        img = Image.open(io.BytesIO(img_data))
-                        
-                        # Show thumbnail with button to view detection
-                        if st.button("🔍", key=f"view_{finger_code}", help=f"View {finger_code} detection"):
-                            st.session_state[f"show_detection_{finger_code}"] = not st.session_state.get(f"show_detection_{finger_code}", False)
-                        
-                        st.image(img, width=60, caption=f"{finger_code}")
-                    except:
-                        st.markdown(f"""
-                        <div style='
-                            width: 52px;
-                            height: 77px;
-                            border: 1px solid #DE8F0F;
-                            border-radius: 4px;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            background: #F5F5F5;
-                            font-size: 10px;
-                            color: #666;
-                        '>
-                            {finger_code}
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.markdown("""
-                    <div style='
-                        width: 52px;
-                        height: 77px;
-                        border: 1px solid #DE8F0F;
-                        border-radius: 4px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        background: #F5F5F5;
-                        font-size: 10px;
-                        color: #999;
-                    '>
-                        —
+                # 2. Finger Code
+                with col2: 
+                    st.markdown(f"<p style='padding-top:10px;'><strong>Finger: {finger_code}</strong></p>", unsafe_allow_html=True)
+                
+                # 3. Pattern
+                with col3: 
+                    st.markdown(f"<p style='padding-top:10px;'><strong>{pattern_display}</strong><br><span style='font-size:12px;color:#888'>{confidence:.0f}%</span></p>", unsafe_allow_html=True)
+                
+                # 4. RC (Touchbased 专属)
+                rc = max(analysis.get("ridge_counts", []) or [0]) if analysis else 0
+                with col4: 
+                    st.markdown(f"<p style='padding-top:10px;'><strong>RC</strong><br>{rc}</p>", unsafe_allow_html=True)
+                
+                # 5. Rank (Touchbased 专属)
+                rank = rankings.get(finger_code, "-")
+                with col5: 
+                    st.markdown(f"<p style='padding-top:10px;'><strong>Rank</strong><br>{rank}</p>", unsafe_allow_html=True)
+
+            # ====== 分支 B: Touchless (简化版) ======
+            else:
+                col1, col2 = st.columns([1, 3])
+                
+                # 1. Image
+                with col1:
+                    if finger_code in st.session_state.fingerprints:
+                        try:
+                            img_data = base64.b64decode(fp_data["image_base64"])
+                            img = Image.open(io.BytesIO(img_data))
+                            if st.button("🔍", key=f"v_{finger_code}"): 
+                                st.session_state[f"show_{finger_code}"] = not st.session_state.get(f"show_{finger_code}", False)
+                            st.image(img, width=80)
+                        except: st.write("Err")
+                
+                # 2. Info (Combined Finger + Pattern)
+                with col2:
+                    color = "#10B981" if confidence > 80 else "#3B82F6"
+                    st.markdown(f"""
+                    <div style='margin-top:5px;'>
+                        <span style='font-weight:600; font-size:16px;'>{finger_code} - {finger_name}</span><br>
+                        <span style='font-size:22px; font-weight:700; color:{color};'>{pattern_display}</span>
+                        <span style='font-size:12px; color:#999; margin-left:8px;'>({confidence:.0f}%)</span>
                     </div>
                     """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <p style='font-size: 20px; font-weight: 400; margin: 0; padding-top: 10px;'>
-                    <strong>Finger : {finger_code}</strong>
-                </p>
-                """, unsafe_allow_html=True)
-            
-            with col3:
-                st.markdown(f"""
-                <p style='font-size: 20px; font-weight: 400; margin: 0; padding-top: 10px;'>
-                    <strong>Pattern</strong><br/>{pattern}
-                </p>
-                """, unsafe_allow_html=True)
-            
-            with col4:
-                # Display ridge count with 1 decimal place
-                rc_display = f"{ridge_count:.1f}" if ridge_count > 0 else "0"
-                st.markdown(f"""
-                <p style='font-size: 20px; font-weight: 400; margin: 0; padding-top: 10px;'>
-                    <strong>RC</strong><br/>{rc_display}
-                </p>
-                """, unsafe_allow_html=True)
-            
-            with col5:
-                # Display rank as number (1-10)
-                st.markdown(f"""
-                <p style='font-size: 20px; font-weight: 400; margin: 0; padding-top: 10px;'>
-                    <strong>Rank</strong><br/>{rank}
-                </p>
-                """, unsafe_allow_html=True)
-            
-            # Show detection overlay if button was clicked
-            if st.session_state.get(f"show_detection_{finger_code}", False):
-                st.markdown("---")
-                st.markdown(f"### 🎯 {finger_code} - Core & Delta Detection with Ridge Counting")
-                
-                if analysis and analysis.get("success"):
-                    # Show overlay image prominently
-                    if analysis.get("overlay_base64"):
-                        try:
-                            overlay_data = analysis["overlay_base64"]
-                            if overlay_data.startswith("data:image"):
-                                overlay_data = overlay_data.split(",")[1]
-                            overlay_bytes = base64.b64decode(overlay_data)
-                            overlay_img = Image.open(io.BytesIO(overlay_bytes))
-                            
-                            # Display large overlay - constrained to viewport
-                            st.image(overlay_img, caption=f"{finger_code} - Poincaré Index Detection (Cores, Deltas, Ridge Counting)", 
-                                    use_container_width=True, clamp=True)
-                            
-                            # Show detection details
-                            detect_col1, detect_col2, detect_col3 = st.columns(3)
-                            
-                            with detect_col1:
-                                st.metric("🔴 Cores", analysis.get('num_cores', 0))
-                            
-                            with detect_col2:
-                                st.metric("🔵 Deltas", analysis.get('num_deltas', 0))
-                            
-                            with detect_col3:
-                                ridge_counts = analysis.get("ridge_counts", [])
-                                if ridge_counts:
-                                    max_rc = max(ridge_counts)
-                                    st.metric("📏 Max Ridge Count", f"{max_rc}")
-                            
-                            # Show individual ridge counts
-                            if ridge_counts:
-                                st.markdown("**Individual Ridge Counts:**")
-                                st.write(", ".join([f"**{rc}**" for rc in ridge_counts]))
-                            
-                            # Classification info
-                            classification = analysis.get("classification", {})
-                            if classification:
-                                st.info(f"**Pattern:** {classification.get('predicted_class', 'N/A').upper()} | **Confidence:** {classification.get('confidence', 0) * 100:.1f}%")
-                            
-                            # Legend
-                            st.markdown("""
-                            **Legend:**
-                            - 🔴 **Red Circles** = Cores (center points)
-                            - 🔵 **Blue Triangles** = Deltas (divergence points)
-                            - 📏 **Green Lines** = Ridge counting paths between core-delta pairs
-                            - 💚 **Numbers on lines** = Ridge count for that path
-                            """)
-                            
-                        except Exception as e:
-                            st.error(f"Failed to load overlay: {e}")
-                    else:
-                        st.warning("Detection overlay not available")
-                        
-                    # Show folder path
-                    if fp_data.get("folder_path"):
-                        st.caption(f"📁 Data saved to: `{fp_data['folder_path']}`")
-                else:
-                    st.error("Analysis data not available or analysis failed")
-            
-            # Show detailed analysis in expandable section
-            elif analysis and analysis.get("success"):
-                with st.expander(f"🔍 View {finger_code} Quick Details", expanded=False):
-                    detail_col1, detail_col2 = st.columns(2)
-                    
-                    with detail_col1:
-                        st.markdown("**📊 Detection Results:**")
-                        st.write(f"- **Cores:** {analysis.get('num_cores', 0)}")
-                        st.write(f"- **Deltas:** {analysis.get('num_deltas', 0)}")
-                        
-                        ridge_counts = analysis.get("ridge_counts", [])
-                        if ridge_counts:
-                            st.write(f"- **Ridge Counts:** {', '.join(map(str, ridge_counts))}")
-                            st.write(f"- **Maximum RC:** {max(ridge_counts)}")
-                        
-                        classification = analysis.get("classification", {})
-                        if classification:
-                            st.write(f"- **Confidence:** {classification.get('confidence', 0) * 100:.1f}%")
-                    
-                    with detail_col2:
-                        # Show small overlay
-                        if analysis.get("overlay_base64"):
-                            st.markdown("**🎯 Detection Preview:**")
-                            try:
-                                overlay_data = analysis["overlay_base64"]
-                                if overlay_data.startswith("data:image"):
-                                    overlay_data = overlay_data.split(",")[1]
-                                overlay_bytes = base64.b64decode(overlay_data)
-                                overlay_img = Image.open(io.BytesIO(overlay_bytes))
-                                st.image(overlay_img, caption=f"{finger_code} Detection", 
-                                        use_container_width=True, clamp=True)
-                                st.caption("Click 🔍 button above to view full size")
-                            except Exception as e:
-                                st.error(f"Failed to load overlay: {e}")
-                    
-                    # Show folder path
-                    if fp_data.get("folder_path"):
-                        st.info(f"📁 Data saved to: `{fp_data['folder_path']}`")
 
+            # === Overlay Expand (通用) ===
+            if st.session_state.get(f"show_{finger_code}", False):
+                if analysis.get("overlay_base64"):
+                    try:
+                        d = analysis["overlay_base64"]
+                        if "data:image" in d: d = d.split(",")[1]
+                        st.image(Image.open(io.BytesIO(base64.b64decode(d))), caption=f"{finger_code} Overlay", use_container_width=True)
+                    except: st.error("Overlay error")
 # Helper function to calculate total ridge count for a hand
 def calculate_hand_trc(hand):
     """Calculate total ridge count for a hand (5 fingers)"""
