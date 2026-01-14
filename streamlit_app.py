@@ -1488,7 +1488,7 @@ def scan_fingerprint_dialog(finger_key, finger_name, is_rescan=False):
             """, unsafe_allow_html=True)
 # Dashboard Page - Fingerprint Input
 def dashboard_page():
-mode = st.session_state.get("input_mode", "Touchbased")
+    mode = st.session_state.get("input_mode", "Touchbased")
 
     h1, h2, h3 = st.columns([2, 3, 2])
     with h1: 
