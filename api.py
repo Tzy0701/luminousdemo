@@ -889,7 +889,7 @@ class LiveCaptureSession:
             
         try:
             # Build classpath (match test_java_capture.py)
-            java_dir = BASE_DIR / "java_ capture"
+            java_dir = BASE_DIR / "java_capture"
             zkfp_jar = BASE_DIR / "ZKFinger Standard SDK 5.3.0.33" / "Java" / "lib" / "ZKFingerReader.jar"
             
             if not zkfp_jar.exists():
@@ -2579,7 +2579,7 @@ async def live_scanner_stream():
     """
     async def event_generator():
         # Path to LiveCapture.java
-        java_dir = BASE_DIR / "java_ capture"
+        java_dir = BASE_DIR / "java_capture"
         jar_path = BASE_DIR / "ZKFinger Standard SDK 5.3.0.33" / "Java" / "lib" / "ZKFingerReader.jar"
         
         # Check if files exist
