@@ -1291,7 +1291,7 @@ def capture_fingerprint_once():
     This will turn on the green light and wait for finger placement.
     Returns (base64_data, error_message) tuple.
     """
-    java_capture_dir = Path("java_ capture")
+    java_capture_dir = Path("java_capture")
     zkfp_jar = Path("ZKFinger Standard SDK 5.3.0.33/Java/lib/ZKFingerReader.jar")
     
     try:
